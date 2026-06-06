@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="manifest" href="./manifest.json">
+    <meta charset="UTF-8">
+    <!-- PWA 核心 Meta 标签：开启全屏、禁止缩放、适配刘海屏 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#F2F2F7">
+    <title>水文终端 Pro</title>
+    
+    <style>
+        /* ==========================================
+           1. Apple 级全局设定
+           ========================================== */
+        :root {
+            --sys-blue: #007AFF;
+            --sys-bg: #F2F2F7;
+            --sys-card: #FFFFFF;
+            --sys-text: #000000;
+            --sys-sub: #8E8E93;
+            --sys-border: rgba(60, 60, 67, 0.25);
+            --sys-red: #FF3B30;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+
+        body { background-color: var(--sys-bg); color: var(--sys-text); overflow-x: hidden; padding-top: 110px; padding-bottom: 120px; }
+
+        /* ==========================================
+           2. 极致紧凑的 iOS 导航栏 & 仪表盘
+           ========================================== */
+        .nav-bar {
+            position: fixed; top: 0; left: 0; width: 100%; z-index: 999;
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-bottom: 0.5px solid var(--sys-border);
+            padding: env(safe-area-inset-top) 16px 10px 16px;
+        }
+
+        .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .nav-title { font-size: 17px; font-weight: 600; }
+        .btn-icon { background: none; border: none; font-size: 22px; color: var(--sys-blue); cursor: pointer; }
+
+        .dashboard { display: flex; justify-content: space-between; gap: 8px; }
+        .dash-card { flex: 1; background: var(--sys-bg); border-radius: 10px; padding: 6px 8px; text-align: center; }
+        .dash-label { font-size: 10px; color: var(--sys-sub); font-weight: 500; margin-bottom: 2px; }
+        .dash-val { font-size: 16px; font-weight: 700; color: var(--sys-blue); font-variant-numeric: tabular-nums; }
+
+        /* ==========================================
+           3. 原生 Table 表格 (修复穿模与全边框)
+           ========================================== */
+        .grid-wrapper {
+            margin: 0 16px; background: var(--sys-card); border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+            border: 1px solid var(--sys-border);
+        }
+
+        .scroll-container { width: 100%; max-height: calc(100vh - 180px); overflow: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .scroll-container::-webkit-scrollbar { display: none; }
+
+        .data-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+        
+        .data-table th, .data-table td { 
+            padding: 6px 4px; text-align: center; vertical-align: middle;
+            border-bottom: 1px solid var(--sys-border);
+            border-right: 1px solid var(--sys-border);
+        }
+        .data-table th:last-child, .data-table td:last-child { border-right: none; }
+
+        .data-table th { font-size: 12px; font-weight: 600; color: var(--sys-sub); background: #F9F9EB; position: sticky; top: 0; z-index: 40; white-space: nowrap; }
+        .data-table th:nth-child(1), .data-table td.col-frozen { position: sticky; left: 0; z-index: 20; background: var(--sys-card); box-shadow: 2px 0 5px rgba(0,0,0,0.05); width: 65px; }
+        .data-table th:nth-child(1) { z-index: 50; background: #F9F9EB; }
+
+        .cell-input {
+            width: 64px; height: 36px; border: none; background: transparent;
+            text-align: center; font-size: 15px; font-weight: 500; color: var(--sys-text);
+            border-radius: 6px; transition: background 0.2s; outline: none;
+        }
+        .cell-input.dialing { background: var(--sys-blue); color: #fff; font-weight: 700; }
+        .cell-input:disabled { color: var(--sys-sub); }
+        .cell-input.readonly { color: var(--sys-blue); font-weight: 600; }
+
+        .btn-vertical { width: 100%; height: 32px; background: rgba(0,122,255,0.08); color: var(--sys-blue); border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .btn-vertical.bank { background: transparent; color: var(--sys-blue); text-decoration: underline; text-underline-offset: 3px; }
+
+        .col-ice { display: none; background: rgba(0,122,255,0.02); }
+        .show-ice .col-ice { display: table-cell; }
+        
+        .col-sediment { display: none !important; }
+        .show-sediment .col-sediment { display: table-cell !important; }
+        .show-sediment-dash { display: none; }
+        .show-sediment .show-sediment-dash { display: block; }
+
+        /* ==========================================
+           4. iOS 底部弹窗 (Action Sheet)
+           ========================================== */
+        .overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+        .overlay.active { opacity: 1; pointer-events: auto; }
+        .action-sheet { position: absolute; bottom: 0; left: 0; width: 100%; background: var(--sys-bg); border-radius: 20px 20px 0 0; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
+        .overlay.active .action-sheet { transform: translateY(0); }
+        
+        .sheet-title { text-align: center; font-size: 13px; font-weight: 600; color: var(--sys-sub); margin-bottom: 16px; }
+        .sheet-menu { background: var(--sys-card); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+        .sheet-item { width: 100%; height: 56px; background: transparent; border: none; border-bottom: 0.5px solid var(--sys-border); font-size: 17px; color: var(--sys-blue); cursor: pointer; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; }
+        .sheet-item:last-child { border-bottom: none; }
+        .sheet-item.danger { color: var(--sys-red); }
+        .sheet-item-label { color: var(--sys-text); font-size: 16px; }
+        .sheet-input { text-align: right; font-size: 17px; border: none; outline: none; color: var(--sys-blue); width: 100px; }
+        .sheet-select { font-size: 17px; color: var(--sys-blue); border: none; outline: none; background: transparent; direction: rtl; }
+
+        .btn-cancel { width: 100%; height: 56px; background: var(--sys-card); border: none; border-radius: 14px; font-size: 17px; font-weight: 600; color: var(--sys-blue); cursor: pointer; }
+
+        /* Apple 风格 Toggle 开关 */
+        .switch { position: relative; display: inline-block; width: 50px; height: 30px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #E5E5EA; transition: .3s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 2px; bottom: 2px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+        input:checked + .slider { background-color: var(--success-green); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* ==========================================
+           5. 悬浮操作按钮 (FAB)
+           ========================================== */
+        .fab-container { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); right: 16px; z-index: 900; display: flex; flex-direction: column; gap: 12px; }
+        .fab { width: 54px; height: 54px; border-radius: 27px; border: none; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; font-size: 24px; }
+        .fab-add { background: var(--sys-blue); color: #fff; }
+        .fab-export { background: var(--sys-card); color: var(--success-green); border: 0.5px solid var(--sys-border); }
+        .fab:active { transform: scale(0.92); }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部导航与仪表盘 -->
+    <header class="nav-bar">
+        <div class="nav-header">
+            <div class="nav-title">水文测验 Pro</div>
+            <button class="btn-icon" id="btn-open-settings">⚙️</button>
+        </div>
+        <div class="dashboard">
+            <div class="dash-card">
+                <div class="dash-label">总面积 (m²)</div>
+                <div class="dash-val" id="ui-total-area">0.00</div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-label">总流量 (m³/s)</div>
+                <div class="dash-val" id="ui-total-q">0.00</div>
+            </div>
+            <div class="dash-card show-sediment-dash">
+                <div class="dash-label">总输沙率 (kg/s)</div>
+                <div class="dash-val" id="ui-total-s">0.00</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. 原生 Table 表格 -->
+    <main class="grid-wrapper">
+        <div class="scroll-container" id="grid-scroll">
+            <table class="data-table">
+                <thead id="grid-header">
+                    <tr>
+                        <th>垂线号</th>
+                        <th>起点距(m)</th>
+                        <th>测得水深</th>
+                        <th class="col-ice">水浸冰厚</th>
+                        <th class="col-ice">应用水深</th>
+                        <th>相对位置</th>
+                        <th>绝对位置</th>
+                        <th>测得流速</th>
+                        <th>流向偏角</th>
+                        <th>修正流速</th>
+                        <th>平均流速</th>
+                        <th class="col-sediment">含沙量</th>
+                        <th>部分面积</th>
+                        <th>部分流量</th>
+                        <th class="col-sediment">部分输沙</th>
+                    </tr>
+                </thead>
+                <tbody id="grid-body"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- 3. 悬浮按钮 -->
+    <div class="fab-container">
+        <button class="fab fab-export" id="btn-export">📥</button>
+        <button class="fab fab-add" id="btn-add-bottom">➕</button>
+    </div>
+
+    <!-- 4. 全局设置弹窗 -->
+    <div class="overlay" id="sheet-settings">
+        <div class="action-sheet">
+            <div class="sheet-title">测验全局设置</div>
+            <div class="sheet-menu">
+                <div class="sheet-item">
+                    <span class="sheet-item-label">测时水位 (m)</span>
+                    <input type="number" step="0.01" class="sheet-input" id="ui-global-wl" placeholder="0.00">
+                </div>
+                <div class="sheet-item">
+                    <span class="sheet-item-label">水流状态</span>
+                    <select class="sheet-select" id="ui-period">
+                        <option value="open">畅流期</option>
+                        <option value="ice">封冻期</option>
+                    </select>
+                </div>
+                <div class="sheet-item">
+                    <span class="sheet-item-label">测速方法</span>
+                    <select class="sheet-select" id="ui-method">
+                        <option value="1">一点法</option>
+                        <option value="2">二点法</option>
+                        <option value="3">三点法</option>
+                        <option value="5">五点法</option>
+                    </select>
+                </div>
+                <div class="sheet-item">
+                    <span class="sheet-item-label">计算输沙率</span>
+                    <label class="switch">
+                        <input type="checkbox" id="ui-enable-sediment">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <button class="btn-cancel" id="btn-close-settings">完成</button>
+        </div>
+    </div>
+
+    <!-- 5. 垂线操作弹窗 -->
+    <div class="overlay" id="sheet-row-action">
+        <div class="action-sheet">
+            <div class="sheet-title" id="row-action-title">操作垂线</div>
+            <div class="sheet-menu">
+                <button class="sheet-item" id="btn-sheet-insert" style="justify-content: center;">向下插入新垂线</button>
+                <button class="sheet-item danger" id="btn-sheet-delete" style="justify-content: center;">删除此垂线</button>
+            </div>
+            <button class="btn-cancel" id="btn-sheet-cancel">取消</button>
+        </div>
+    </div>
+
+    <!-- ==========================================================================
+         【核心逻辑层：原生 JS 架构】
+         ========================================================================== -->
+    <script>
+        /* --------------------------------------------------------------------------
+           PWA 引擎注入 (实现独立 App 体验，屏蔽滑动返回)
+           -------------------------------------------------------------------------- *
+
+        /* --------------------------------------------------------------------------
+           第一层：核心算法层 (HydroEngine)
+           -------------------------------------------------------------------------- */
+        const HydroEngine = {
+            bankersRound(num, decimalPlaces) {
+                if (isNaN(num) || num === null || num === '') return 0;
+                const d = decimalPlaces || 0, m = Math.pow(10, d), n = +(d ? num * m : num).toFixed(8); 
+                const i = Math.floor(n), f = n - i, e = 1e-8;
+                let r; if (f > 0.5 - e && f < 0.5 + e) r = (i % 2 === 0) ? i : i + 1; else r = Math.round(n);
+                return r / m;
+            },
+            formatValue(value, type) {
+                if (value === 0 || isNaN(value) || value === null || value === '') return "0.00";
+                let sigFigs = 3, maxDecimals = type === 'area' ? 2 : 3;
+                const absVal = Math.abs(value);
+                let intDigits = absVal >= 1 ? Math.floor(Math.log10(absVal)) + 1 : 0;
+                let targetDecimals = absVal < 1 ? ((absVal.toFixed(10).match(/^0\.0*([1-9])/) || [''])[0].length - 3) + sigFigs : sigFigs - intDigits;
+                targetDecimals = Math.max(0, Math.min(targetDecimals, maxDecimals));
+                return this.bankersRound(value, targetDecimals).toFixed(targetDecimals);
+            },
+            calcAppDepth(obdp, iceThick, period) { return period === 'open' ? (parseFloat(obdp) || 0) : Math.max(0, (parseFloat(obdp) || 0) - (parseFloat(iceThick) || 0)); },
+            calcCorrectedVelocity(v, appDepth) { const vel = parseFloat(v) || 0, depth = parseFloat(appDepth) || 0; return (depth > 0 && depth < 0.2) ? this.bankersRound(vel * 0.9, 3) : vel; },
+            calcAbsPosition(appDepth, relPos) { return this.bankersRound((parseFloat(appDepth) || 0) * (parseFloat(relPos) || 0), 2); },
+            calcMeanVelocity(measurePoints, method) {
+                if (!measurePoints || measurePoints.length === 0) return 0;
+                const v = measurePoints.map(p => parseFloat(p.cor_qv) || 0);
+                let meanV = 0;
+                if (method === '1' && v.length >= 1) meanV = v[0];
+                else if (method === '2' && v.length >= 2) meanV = (v[0] + v[1]) / 2;
+                else if (method === '3' && v.length >= 3) meanV = (v[0] + 2 * v[1] + v[2]) / 4;
+                else if (method === '5' && v.length >= 5) meanV = (v[0] + 3 * v[1] + 2 * v[2] + 3 * v[3] + v[4]) / 10;
+                else meanV = v.reduce((a, b) => a + b, 0) / v.length;
+                return this.bankersRound(meanV, 3);
+            },
+            calculateSection(verticals) {
+                let totalArea = 0, totalDischarge = 0, totalSedimentRate = 0, parts = []; 
+                if (!verticals || verticals.length < 2) return { totalArea: 0, totalDischarge: 0, totalSedimentRate: 0, parts: [] };
+                for (let i = 1; i < verticals.length; i++) {
+                    const v1 = verticals[i - 1], v2 = verticals[i];
+                    const deltaL = Math.abs((parseFloat(v2.dis) || 0) - (parseFloat(v1.dis) || 0));
+                    const partArea = (((parseFloat(v1.app_dp) || 0) + (parseFloat(v2.app_dp) || 0)) / 2) * deltaL;
+                    const partDischarge = partArea * (((parseFloat(v1.mean_qv) || 0) + (parseFloat(v2.mean_qv) || 0)) / 2);
+                    const partSedimentRate = partDischarge * (((parseFloat(v1.sediment) || 0) + (parseFloat(v2.sediment) || 0)) / 2);
+                    totalArea += partArea; totalDischarge += partDischarge; totalSedimentRate += partSedimentRate;
+                    parts.push({ index: i, area: partArea, discharge: partDischarge, sedimentRate: partSedimentRate });
+                }
+                return { totalArea, totalDischarge, totalSedimentRate, parts };
+            }
+        };
+
+        /* --------------------------------------------------------------------------
+           第二层：状态管理层 (AppState)
+           -------------------------------------------------------------------------- */
+        const AppState = {
+            STORAGE_KEY: 'hydro_v8_data', SETTINGS_KEY: 'hydro_v8_settings',
+            data: { verticals: [], settings: { period: 'open', method: '1', startBank: 'right', globalWl: '', currentStep: 3.0, enableSediment: false } },
+
+            generateMeasurePoints(method, period) {
+                let relPositions = [];
+                if (period === 'ice') {
+                    if (method === '1') relPositions = [0.5]; else if (method === '2') relPositions = [0.2, 0.8]; else if (method === '3') relPositions = [0.15, 0.5, 0.85]; else relPositions = [0.5]; 
+                } else {
+                    if (method === '1') relPositions = [0.6]; else if (method === '2') relPositions = [0.2, 0.8]; else if (method === '3') relPositions = [0.2, 0.6, 0.8]; else if (method === '5') relPositions = [0.0, 0.2, 0.6, 0.8, 1.0];
+                }
+                return relPositions.map(pos => ({ rel_pos: pos, abs_pos: 0, raw_qv: '', cor_qv: 0 }));
+            },
+
+            createVertical(type = 'normal', dpno = '') {
+                const pts = (type === 'normal') ? this.generateMeasurePoints(this.data.settings.method, this.data.settings.period) : [];
+                return { id: 'v_' + Date.now() + Math.random().toString(36).substr(2, 5), type: type, dpno: dpno, dis: '', obdp: '', ice_thick: '', app_dp: 0, angle_flow: '', sediment: '', mean_qv: 0, measurePoints: pts };
+            },
+
+            init() {
+                try {
+                    const savedSettings = localStorage.getItem(this.SETTINGS_KEY);
+                    if (savedSettings) this.data.settings = { ...this.data.settings, ...JSON.parse(savedSettings) };
+                    const savedData = localStorage.getItem(this.STORAGE_KEY);
+                    if (savedData) { this.data.verticals = JSON.parse(savedData); } 
+                    else {
+                        const startName = this.data.settings.startBank === 'right' ? '右水边' : '左水边';
+                        const endName = this.data.settings.startBank === 'right' ? '左水边' : '右水边';
+                        let v1 = this.createVertical('start_bank', startName); v1.dis = 10;
+                        let v2 = this.createVertical('normal', '1'); v2.dis = 13;
+                        let v3 = this.createVertical('normal', '2'); v3.dis = 16;
+                        let v4 = this.createVertical('end_bank', endName); v4.dis = 20;
+                        this.data.verticals = [v1, v2, v3, v4];
+                    }
+                } catch (e) {}
+                this.recalcAll();
+            },
+
+            save() {
+                try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.data.verticals)); localStorage.setItem(this.SETTINGS_KEY, JSON.stringify(this.data.settings)); } catch (e) {}
+            },
+
+            updateMethod(newMethod) {
+                this.data.settings.method = newMethod;
+                const period = this.data.settings.period;
+                this.data.verticals.forEach(v => { if (v.type === 'normal') v.measurePoints = this.generateMeasurePoints(newMethod, period); });
+                this.recalcAll();
+            },
+
+            recalcAll() {
+                const period = this.data.settings.period, method = this.data.settings.method;
+                this.data.verticals.forEach(v => {
+                    if (v.type === 'start_bank' || v.type === 'end_bank') { v.obdp = 0; v.ice_thick = 0; v.app_dp = 0; v.mean_qv = 0; } 
+                    else {
+                        v.app_dp = HydroEngine.calcAppDepth(v.obdp, v.ice_thick, period);
+                        v.measurePoints.forEach(pt => { pt.abs_pos = HydroEngine.calcAbsPosition(v.app_dp, pt.rel_pos); pt.cor_qv = HydroEngine.calcCorrectedVelocity(pt.raw_qv, v.app_dp); });
+                        v.mean_qv = HydroEngine.calcMeanVelocity(v.measurePoints, method);
+                    }
+                });
+            }
+        };
+
+        /* --------------------------------------------------------------------------
+           第三层：视图渲染层 (UIRenderer)
+           -------------------------------------------------------------------------- */
+        const UIRenderer = {
+            init() {
+                this.cacheDOM();
+                this.bindEvents();
+                this.renderAll();
+            },
+
+            cacheDOM() {
+                this.gridBody = document.getElementById('grid-body');
+                this.gridHeader = document.getElementById('grid-header');
+                this.uiTotalArea = document.getElementById('ui-total-area');
+                this.uiTotalQ = document.getElementById('ui-total-q');
+                this.uiTotalS = document.getElementById('ui-total-s');
+                this.uiGlobalWl = document.getElementById('ui-global-wl');
+                this.uiPeriod = document.getElementById('ui-period');
+                this.uiMethod = document.getElementById('ui-method');
+                this.uiEnableSediment = document.getElementById('ui-enable-sediment');
+                this.sheetSettings = document.getElementById('sheet-settings');
+                this.sheetRowAction = document.getElementById('sheet-row-action');
+                this.currentRowIndex = null;
+            },
+
+            bindEvents() {
+                // 弹窗控制
+                document.getElementById('btn-open-settings').addEventListener('click', () => {
+                    this.uiGlobalWl.value = AppState.data.settings.globalWl;
+                    this.uiPeriod.value = AppState.data.settings.period;
+                    this.uiMethod.value = AppState.data.settings.method;
+                    this.uiEnableSediment.checked = AppState.data.settings.enableSediment;
+                    this.sheetSettings.classList.add('active');
+                });
+                
+                document.getElementById('btn-close-settings').addEventListener('click', () => {
+                    AppState.data.settings.globalWl = this.uiGlobalWl.value;
+                    AppState.data.settings.enableSediment = this.uiEnableSediment.checked;
+                    
+                    if (this.uiEnableSediment.checked) document.body.classList.add('show-sediment');
+                    else document.body.classList.remove('show-sediment');
+
+                    const newPeriod = this.uiPeriod.value, newMethod = this.uiMethod.value;
+                    let needFullRender = false;
+                    if (newPeriod !== AppState.data.settings.period || newMethod !== AppState.data.settings.method) {
+                        AppState.data.settings.period = newPeriod;
+                        AppState.updateMethod(newMethod);
+                        needFullRender = true;
+                    }
+                    
+                    AppState.save();
+                    this.sheetSettings.classList.remove('active');
+                    if (needFullRender) this.renderAll();
+                });
+
+                // 垂线操作
+                document.getElementById('btn-sheet-cancel').addEventListener('click', () => this.sheetRowAction.classList.remove('active'));
+                document.getElementById('btn-sheet-insert').addEventListener('click', () => { this.handleInsertPoint(this.currentRowIndex); this.sheetRowAction.classList.remove('active'); });
+                document.getElementById('btn-sheet-delete').addEventListener('click', () => { this.handleDeletePoint(this.currentRowIndex); this.sheetRowAction.classList.remove('active'); });
+                document.getElementById('btn-add-bottom').addEventListener('click', () => this.handleInsertPoint(AppState.data.verticals.length - 2));
+                document.getElementById('btn-export').addEventListener('click', () => this.exportCSV());
+
+                this.gridBody.addEventListener('input', (e) => this.handleGridInput(e));
+                this.gridBody.addEventListener('click', (e) => {
+                    const btnVertical = e.target.closest('.btn-vertical');
+                    if (btnVertical) {
+                        if (btnVertical.classList.contains('bank')) this.handleSwapBanks();
+                        else {
+                            this.currentRowIndex = parseInt(btnVertical.dataset.vindex);
+                            document.getElementById('row-action-title').textContent = `操作垂线 ${btnVertical.textContent}`;
+                            this.sheetRowAction.classList.add('active');
+                        }
+                    }
+                });
+
+                // 🔥 核心修复：防误触拨盘与键盘劫持 🔥
+                this.bindHapticSwipe();
+            },
+
+            bindHapticSwipe() {
+                let startY = 0, startVal = 0, currentInput = null, isLongPress = false, pressTimer = null;
+
+                this.gridBody.addEventListener('touchstart', (e) => {
+                    if (e.target.tagName === 'INPUT' && e.target.type === 'number' && !e.target.readOnly && !e.target.disabled) {
+                        startY = e.touches[0].clientY;
+                        startVal = parseFloat(e.target.value) || 0;
+                        currentInput = e.target;
+                        isLongPress = false;
+                        
+                        // 劫持键盘：触摸瞬间设为只读，防止键盘弹出
+                        currentInput.setAttribute('readonly', 'true');
+
+                        // 400ms 后确认为长按拨盘模式
+                        pressTimer = setTimeout(() => {
+                            isLongPress = true;
+                            currentInput.classList.add('dialing');
+                            if (navigator.vibrate) navigator.vibrate(15);
+                        }, 400);
+                    }
+                }, { passive: true });
+
+                this.gridBody.addEventListener('touchmove', (e) => {
+                    if (!currentInput) return;
+                    if (!isLongPress) {
+                        // 还没到 400ms 就滑动，说明是正常滚动网页
+                        clearTimeout(pressTimer);
+                        currentInput.removeAttribute('readonly');
+                        currentInput = null;
+                        return;
+                    }
+
+                    e.preventDefault(); // 拦截网页滚动
+                    const deltaY = startY - e.touches[0].clientY;
+                    if (Math.abs(deltaY) > 10) {
+                        const step = parseFloat(currentInput.step) || 1;
+                        const ticks = Math.floor(deltaY / 10);
+                        const newVal = startVal + (ticks * step);
+                        const decimals = step < 1 ? step.toString().split('.')[1].length : 0;
+                        const formattedVal = newVal.toFixed(decimals);
+
+                        if (currentInput.value !== formattedVal) {
+                            currentInput.value = formattedVal;
+                            if (navigator.vibrate) navigator.vibrate(5);
+                            currentInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }
+                }, { passive: false });
+
+                this.gridBody.addEventListener('touchend', () => { 
+                    clearTimeout(pressTimer);
+                    if (currentInput) {
+                        currentInput.classList.remove('dialing');
+                        if (!isLongPress) {
+                            // 短按：移除只读并主动聚焦，唤起键盘
+                            currentInput.removeAttribute('readonly');
+                            currentInput.focus();
+                        } else {
+                            // 长按结束：移除只读但失去焦点，防止键盘弹出
+                            currentInput.removeAttribute('readonly');
+                            currentInput.blur();
+                        }
+                    }
+                    currentInput = null; 
+                    isLongPress = false;
+                });
+            },
+
+            handleSwapBanks() {
+                const s = AppState.data.settings;
+                s.startBank = s.startBank === 'right' ? 'left' : 'right';
+                const startName = s.startBank === 'right' ? '右水边' : '左水边';
+                const endName = s.startBank === 'right' ? '左水边' : '右水边';
+                if (AppState.data.verticals.length > 0) {
+                    AppState.data.verticals[0].dpno = startName;
+                    AppState.data.verticals[AppState.data.verticals.length - 1].dpno = endName;
+                }
+                this.renderGrid();
+                AppState.save();
+            },
+
+            handleGridInput(e) {
+                const vindex = parseInt(e.target.dataset.vindex), pindex = e.target.dataset.pindex !== undefined ? parseInt(e.target.dataset.pindex) : null, field = e.target.dataset.field;
+                const vertical = AppState.data.verticals[vindex];
+                let val = e.target.value; if (e.target.type === 'number') val = val === '' ? '' : parseFloat(val);
+
+                if (pindex !== null) { vertical.measurePoints[pindex][field] = val; } 
+                else {
+                    vertical[field] = val;
+                    if (field === 'dis' && vindex > 0) {
+                        const currDis = parseFloat(vertical.dis), prevDis = parseFloat(AppState.data.verticals[vindex - 1].dis);
+                        if (!isNaN(currDis) && !isNaN(prevDis) && currDis > prevDis && vertical.type === 'normal' && AppState.data.verticals[vindex-1].type === 'normal') {
+                            AppState.data.settings.currentStep = currDis - prevDis;
+                        }
+                    }
+                }
+
+                AppState.recalcAll();
+                this.updateRowDOM(vindex);
+                this.updateDashboard();
+                this.updatePartValuesDOM();
+                AppState.save();
+            },
+
+            handleInsertPoint(vindex) {
+                const verticals = AppState.data.verticals;
+                let step = AppState.data.settings.currentStep || 3.0; 
+                const prevV = verticals[vindex];
+                const currDis = parseFloat(prevV.dis) || 0;
+                const newV = AppState.createVertical('normal', '');
+                newV.dis = parseFloat((currDis + step).toFixed(1));
+                
+                // 继承流向偏角和相对位置
+                newV.angle_flow = prevV.angle_flow;
+                if (prevV.type === 'normal' && prevV.measurePoints.length === newV.measurePoints.length) {
+                    newV.measurePoints.forEach((pt, i) => { pt.rel_pos = prevV.measurePoints[i].rel_pos; });
+                }
+                
+                verticals.splice(vindex + 1, 0, newV);
+                let normalCount = 1;
+                for (let i = 1; i < verticals.length - 1; i++) { verticals[i].dpno = normalCount.toString(); normalCount++; }
+                this.renderAll();
+            },
+
+            handleDeletePoint(vindex) {
+                const verticals = AppState.data.verticals;
+                if (verticals[vindex].type !== 'normal') return;
+                verticals.splice(vindex, 1);
+                let normalCount = 1;
+                for (let i = 1; i < verticals.length - 1; i++) { verticals[i].dpno = normalCount.toString(); normalCount++; }
+                this.renderAll();
+            },
+
+            updateRowDOM(vindex) {
+                const v = AppState.data.verticals[vindex];
+                if (v.type === 'normal') {
+                    const appDpInput = this.gridBody.querySelector(`input[data-vindex="${vindex}"][data-field="app_dp"]`);
+                    const meanQvInput = this.gridBody.querySelector(`input[data-vindex="${vindex}"][data-field="mean_qv"]`);
+                    if (appDpInput) appDpInput.value = v.app_dp;
+                    if (meanQvInput) meanQvInput.value = v.mean_qv;
+
+                    v.measurePoints.forEach((pt, pindex) => {
+                        const absPosInput = this.gridBody.querySelector(`input[data-vindex="${vindex}"][data-pindex="${pindex}"][data-field="abs_pos"]`);
+                        const corQvInput = this.gridBody.querySelector(`input[data-vindex="${vindex}"][data-pindex="${pindex}"][data-field="cor_qv"]`);
+                        if (absPosInput) absPosInput.value = pt.abs_pos;
+                        if (corQvInput) corQvInput.value = pt.cor_qv;
+                    });
+                }
+            },
+
+            updatePartValuesDOM() {
+                const result = HydroEngine.calculateSection(AppState.data.verticals);
+                result.parts.forEach(part => {
+                    const areaInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partArea"]`);
+                    const qInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partQ"]`);
+                    const sInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partS"]`);
+                    if (areaInput) areaInput.value = HydroEngine.formatValue(part.area, 'area');
+                    if (qInput) qInput.value = HydroEngine.formatValue(part.discharge, 'discharge');
+                    if (sInput) sInput.value = HydroEngine.formatValue(part.sedimentRate, 'discharge');
+                });
+            },
+
+            updateDashboard() {
+                const result = HydroEngine.calculateSection(AppState.data.verticals);
+                this.uiTotalArea.textContent = HydroEngine.formatValue(result.totalArea, 'area');
+                this.uiTotalQ.textContent = HydroEngine.formatValue(result.totalDischarge, 'discharge');
+                this.uiTotalS.textContent = HydroEngine.formatValue(result.totalSedimentRate, 'discharge');
+            },
+
+            renderGrid() {
+                const isIce = AppState.data.settings.period === 'ice';
+                if (isIce) this.gridHeader.classList.add('show-ice'); else this.gridHeader.classList.remove('show-ice');
+                if (AppState.data.settings.enableSediment) document.body.classList.add('show-sediment'); else document.body.classList.remove('show-sediment');
+
+                const result = HydroEngine.calculateSection(AppState.data.verticals);
+                let html = '';
+
+                AppState.data.verticals.forEach((v, vindex) => {
+                    const isBank = v.type !== 'normal';
+                    const disabledAttr = isBank ? 'disabled' : '';
+                    const ptsLen = isBank ? 1 : Math.max(1, v.measurePoints.length);
+                    
+                    let partArea = '-', partQ = '-', partS = '-';
+                    if (vindex > 0) {
+                        const part = result.parts.find(pt => pt.index === vindex);
+                        if (part) {
+                            partArea = HydroEngine.formatValue(part.area, 'area');
+                            partQ = HydroEngine.formatValue(part.discharge, 'discharge');
+                            partS = HydroEngine.formatValue(part.sedimentRate, 'discharge');
+                        }
+                    }
+
+                    for (let pindex = 0; pindex < ptsLen; pindex++) {
+                        const isFirst = pindex === 0;
+                        const pt = isBank ? { rel_pos: '', abs_pos: 0, raw_qv: '', cor_qv: 0 } : v.measurePoints[pindex];
+                        
+                        html += `<tr>`;
+                        if (isFirst) {
+                            html += `
+                                <td rowspan="${ptsLen}" class="col-frozen">
+                                    ${isBank ? `<button class="btn-vertical bank" data-vindex="${vindex}">${v.dpno}</button>` : `<button class="btn-vertical" data-vindex="${vindex}">${v.dpno}</button>`}
+                                </td>
+                                <td rowspan="${ptsLen}"><input type="number" step="0.1" class="cell-input" data-vindex="${vindex}" data-field="dis" value="${v.dis}"></td>
+                                <td rowspan="${ptsLen}"><input type="number" step="0.01" class="cell-input" data-vindex="${vindex}" data-field="obdp" value="${v.obdp}" ${disabledAttr}></td>
+                                <td rowspan="${ptsLen}" class="col-ice"><input type="number" step="0.01" class="cell-input" data-vindex="${vindex}" data-field="ice_thick" value="${v.ice_thick}" ${disabledAttr}></td>
+                                <td rowspan="${ptsLen}" class="col-ice"><input type="number" class="cell-input readonly" data-vindex="${vindex}" data-field="app_dp" value="${v.app_dp}" readonly></td>
+                            `;
+                        }
+
+                        html += `
+                            <td><input type="number" step="0.1" class="cell-input" data-vindex="${vindex}" data-pindex="${pindex}" data-field="rel_pos" value="${pt.rel_pos}" ${disabledAttr}></td>
+                            <td><input type="number" class="cell-input readonly" data-vindex="${vindex}" data-pindex="${pindex}" data-field="abs_pos" value="${pt.abs_pos}" readonly></td>
+                            <td><input type="number" step="0.001" class="cell-input" data-vindex="${vindex}" data-pindex="${pindex}" data-field="raw_qv" value="${pt.raw_qv}" ${disabledAttr}></td>
+                        `;
+
+                        if (isFirst) { html += `<td rowspan="${ptsLen}"><input type="number" step="1" class="cell-input" data-vindex="${vindex}" data-field="angle_flow" value="${v.angle_flow}"></td>`; }
+
+                        html += `<td><input type="number" class="cell-input readonly" data-vindex="${vindex}" data-pindex="${pindex}" data-field="cor_qv" value="${pt.cor_qv}" readonly></td>`;
+
+                        if (isFirst) {
+                            html += `
+                                <td rowspan="${ptsLen}"><input type="number" class="cell-input readonly" data-vindex="${vindex}" data-field="mean_qv" value="${v.mean_qv}" readonly></td>
+                                <td rowspan="${ptsLen}" class="col-sediment"><input type="number" step="0.001" class="cell-input" data-vindex="${vindex}" data-field="sediment" value="${v.sediment}"></td>
+                                <td rowspan="${ptsLen}"><input type="text" class="cell-input readonly" data-vindex="${vindex}" data-field="partArea" value="${partArea}" readonly></td>
+                                <td rowspan="${ptsLen}"><input type="text" class="cell-input readonly" data-vindex="${vindex}" data-field="partQ" value="${partQ}" readonly></td>
+                                <td rowspan="${ptsLen}" class="col-sediment"><input type="text" class="cell-input readonly" data-vindex="${vindex}" data-field="partS" value="${partS}" readonly></td>
+                            `;
+                        }
+                        html += `</tr>`;
+                    }
+                });
+                this.gridBody.innerHTML = html;
+            },
+
+            renderAll() { this.renderGrid(); this.updateDashboard(); AppState.save(); },
+
+            exportCSV() {
+                let csvContent = "\uFEFF";
+                const isIce = AppState.data.settings.period === 'ice';
+                let headers = ["垂线号", "起点距(m)", "测得水深(m)"];
+                if (isIce) headers.push("水浸冰厚(m)");
+                headers = headers.concat(["应用水深(m)", "相对位置", "绝对位置(m)", "测得流速(m/s)", "流向偏角(°)", "修正流速(m/s)", "垂线平均流速(m/s)", "含沙量(kg/m³)", "部分面积(m²)", "部分流量(m³/s)", "部分输沙率(kg/s)"]);
+                
+                csvContent += `测时水位:,${AppState.data.settings.globalWl} m\n\n`;
+                csvContent += headers.join(",") + "\n";
+
+                const result = HydroEngine.calculateSection(AppState.data.verticals);
+
+                AppState.data.verticals.forEach((v, vindex) => {
+                    const ptsLen = v.type === 'normal' ? v.measurePoints.length : 1;
+                    let partArea = '-', partQ = '-', partS = '-';
+                    if (vindex > 0) {
+                        const part = result.parts.find(pt => pt.index === vindex);
+                        if (part) {
+                            partArea = HydroEngine.formatValue(part.area, 'area');
+                            partQ = HydroEngine.formatValue(part.discharge, 'discharge');
+                            partS = HydroEngine.formatValue(part.sedimentRate, 'discharge');
+                        }
+                    }
+
+                    for (let pindex = 0; pindex < ptsLen; pindex++) {
+                        const pt = v.type === 'normal' ? v.measurePoints[pindex] : { rel_pos: '', abs_pos: 0, raw_qv: '', cor_qv: 0 };
+                        const isFirst = pindex === 0;
+                        let row = [ isFirst ? v.dpno : '', isFirst ? v.dis : '', isFirst ? v.obdp : '' ];
+                        if (isIce) row.push(isFirst ? v.ice_thick : '');
+                        row = row.concat([
+                            isFirst ? v.app_dp : '', pt.rel_pos, pt.abs_pos, pt.raw_qv, 
+                            isFirst ? v.angle_flow : '', pt.cor_qv,
+                            isFirst ? v.mean_qv : '', isFirst ? v.sediment : '',
+                            isFirst ? partArea : '', isFirst ? partQ : '', isFirst ? partS : ''
+                        ]);
+                        csvContent += row.join(",") + "\n";
+                    }
+                });
+
+                const emptyCols = isIce ? ",,,,,,,,,," : ",,,,,,,,,";
+                csvContent += `\n汇总${emptyCols}总面积:,${HydroEngine.formatValue(result.totalArea, 'area')}\n`;
+                csvContent += `${emptyCols}总流量:,${HydroEngine.formatValue(result.totalDischarge, 'discharge')}\n`;
+                csvContent += `${emptyCols}总输沙率:,${HydroEngine.formatValue(result.totalSedimentRate, 'discharge')}\n`;
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `水文测验记载表_${new Date().getTime()}.csv`;
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            }
+        };
+
+      // ==========================================================================
+        // 【启动程序 & 暴力防退出机制】
+        // ==========================================================================
+        // 注册 Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('SW 注册成功，作用域为:', reg.scope))
+            .catch(err => console.log('SW 注册失败:', err));
+    });
+}
+        document.addEventListener('DOMContentLoaded', () => { 
+            AppState.init(); 
+            UIRenderer.init(); 
+
+            // 1. 历史记录劫持 (防止按物理返回键退出)
+            history.pushState(null, null, location.href);
+            window.addEventListener('popstate', function () {
+                history.pushState(null, null, location.href);
+            });
+
+            // 2. 暴力拦截左侧边缘滑动 (专治 iOS/安卓 滑动返回)
+            document.addEventListener('touchstart', function(e) {
+                // 如果手指触摸点距离屏幕左边缘小于 30 像素
+                if (e.touches[0].clientX < 30) {
+                    e.preventDefault(); // 直接在触摸瞬间掐死事件，系统根本收不到滑动指令！
+                }
+            }, { passive: false });
+
+            // 3. 拦截右滑手势
+            let touchStartX = 0;
+            document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+            document.addEventListener('touchmove', e => {
+                let touchEndX = e.touches[0].clientX;
+                // 如果是在屏幕最左侧向右滑动，强制拦截
+                if (touchStartX < 30 && touchEndX > touchStartX) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+        });
+    </script>
+</body>
+</html>
