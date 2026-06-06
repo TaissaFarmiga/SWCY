@@ -16,6 +16,13 @@
            1. Apple 级全局设定
            ========================================== */
         :root {
+            html, body {
+    /* 彻底阻断 iOS/Android 边缘滑动返回与下拉刷新 */
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: none;
+    /* 禁用系统默认手势 */
+    touch-action: pan-y; 
+}
             --sys-blue: #007AFF;
             --sys-bg: #F2F2F7;
             --sys-card: #FFFFFF;
@@ -233,7 +240,6 @@
                 <button class="sheet-item" id="btn-sheet-insert" style="justify-content: center;">向下插入新垂线</button>
                 <button class="sheet-item danger" id="btn-sheet-delete" style="justify-content: center;">删除此垂线</button>
             </div>
-            <button class="btn-cancel" id="btn-sheet-cancel">取消</button>
         </div>
     </div>
 
@@ -248,52 +254,78 @@
         /* --------------------------------------------------------------------------
            第一层：核心算法层 (HydroEngine)
            -------------------------------------------------------------------------- */
-        const HydroEngine = {
-            bankersRound(num, decimalPlaces) {
-                if (isNaN(num) || num === null || num === '') return 0;
-                const d = decimalPlaces || 0, m = Math.pow(10, d), n = +(d ? num * m : num).toFixed(8); 
-                const i = Math.floor(n), f = n - i, e = 1e-8;
-                let r; if (f > 0.5 - e && f < 0.5 + e) r = (i % 2 === 0) ? i : i + 1; else r = Math.round(n);
-                return r / m;
-            },
-            formatValue(value, type) {
-                if (value === 0 || isNaN(value) || value === null || value === '') return "0.00";
-                let sigFigs = 3, maxDecimals = type === 'area' ? 2 : 3;
-                const absVal = Math.abs(value);
-                let intDigits = absVal >= 1 ? Math.floor(Math.log10(absVal)) + 1 : 0;
-                let targetDecimals = absVal < 1 ? ((absVal.toFixed(10).match(/^0\.0*([1-9])/) || [''])[0].length - 3) + sigFigs : sigFigs - intDigits;
-                targetDecimals = Math.max(0, Math.min(targetDecimals, maxDecimals));
-                return this.bankersRound(value, targetDecimals).toFixed(targetDecimals);
-            },
-            calcAppDepth(obdp, iceThick, period) { return period === 'open' ? (parseFloat(obdp) || 0) : Math.max(0, (parseFloat(obdp) || 0) - (parseFloat(iceThick) || 0)); },
-            calcCorrectedVelocity(v, appDepth) { const vel = parseFloat(v) || 0, depth = parseFloat(appDepth) || 0; return (depth > 0 && depth < 0.2) ? this.bankersRound(vel * 0.9, 3) : vel; },
-            calcAbsPosition(appDepth, relPos) { return this.bankersRound((parseFloat(appDepth) || 0) * (parseFloat(relPos) || 0), 2); },
-            calcMeanVelocity(measurePoints, method) {
-                if (!measurePoints || measurePoints.length === 0) return 0;
-                const v = measurePoints.map(p => parseFloat(p.cor_qv) || 0);
-                let meanV = 0;
-                if (method === '1' && v.length >= 1) meanV = v[0];
-                else if (method === '2' && v.length >= 2) meanV = (v[0] + v[1]) / 2;
-                else if (method === '3' && v.length >= 3) meanV = (v[0] + 2 * v[1] + v[2]) / 4;
-                else if (method === '5' && v.length >= 5) meanV = (v[0] + 3 * v[1] + 2 * v[2] + 3 * v[3] + v[4]) / 10;
-                else meanV = v.reduce((a, b) => a + b, 0) / v.length;
-                return this.bankersRound(meanV, 3);
-            },
-            calculateSection(verticals) {
-                let totalArea = 0, totalDischarge = 0, totalSedimentRate = 0, parts = []; 
-                if (!verticals || verticals.length < 2) return { totalArea: 0, totalDischarge: 0, totalSedimentRate: 0, parts: [] };
-                for (let i = 1; i < verticals.length; i++) {
-                    const v1 = verticals[i - 1], v2 = verticals[i];
-                    const deltaL = Math.abs((parseFloat(v2.dis) || 0) - (parseFloat(v1.dis) || 0));
-                    const partArea = (((parseFloat(v1.app_dp) || 0) + (parseFloat(v2.app_dp) || 0)) / 2) * deltaL;
-                    const partDischarge = partArea * (((parseFloat(v1.mean_qv) || 0) + (parseFloat(v2.mean_qv) || 0)) / 2);
-                    const partSedimentRate = partDischarge * (((parseFloat(v1.sediment) || 0) + (parseFloat(v2.sediment) || 0)) / 2);
-                    totalArea += partArea; totalDischarge += partDischarge; totalSedimentRate += partSedimentRate;
-                    parts.push({ index: i, area: partArea, discharge: partDischarge, sedimentRate: partSedimentRate });
+           const HydroEngine = {
+    // 严格遵循国标的偶数法则（四舍六入五成双）
+    bankersRound(num, decimalPlaces) {
+        if (isNaN(num) || num === null || num === '') return 0;
+        const d = decimalPlaces || 0, m = Math.pow(10, d), n = +(d ? num * m : num).toFixed(8);
+        const i = Math.floor(n), f = n - i, e = 1e-8;
+        let r; if (f > 0.5 - e && f < 0.5 + e) r = (i % 2 === 0) ? i : i + 1; else r = Math.round(n);
+        return r / m;
+    },
+    // 根据《水文规范》图表精准格式化
+    formatGB(value, type) {
+        if (value === 0 || isNaN(value) || value === null || value === '') return "-";
+        const abs = Math.abs(value);
+        let res = value;
+        switch (type) {
+            case 'area': // 面积：取三位有效数字，小数不过二位
+                res = Number(abs.toPrecision(3));
+                return (abs % 1 !== 0 && res.toString().split('.')[1]?.length > 2) ? this.bankersRound(res, 2).toFixed(2) : res.toString();
+            case 'discharge': // 流量：取三位有效数字，小数不过三位
+            case 'sediment':  // 输沙率：同流量
+                res = Number(abs.toPrecision(3));
+                return (abs % 1 !== 0 && res.toString().split('.')[1]?.length > 3) ? this.bankersRound(res, 3).toFixed(3) : res.toString();
+            case 'velocity': // 流速：>=1 取三位；<1 取二位有效数字，小数不过三位
+                if (abs >= 1) {
+                    res = Number(abs.toPrecision(3));
+                } else {
+                    res = Number(abs.toPrecision(2));
+                    if (res.toString().split('.')[1]?.length > 3) res = this.bankersRound(res, 3);
                 }
-                return { totalArea, totalDischarge, totalSedimentRate, parts };
-            }
-        };
+                return res.toString();
+            default: return value.toFixed(2);
+        }
+    },
+    // 修复问题10：应用水深 = 测得水深 - 水浸冰厚
+    calcAppDepth(obdp, iceThick, period) { 
+        return period === 'open' ? (parseFloat(obdp) || 0) : Math.max(0, (parseFloat(obdp) || 0) - (parseFloat(iceThick) || 0)); 
+    },
+    // 修复问题3：引入流向偏角的余弦修正
+    calcCorrectedVelocity(v, appDepth, angle_flow) { 
+        let vel = parseFloat(v) || 0, depth = parseFloat(appDepth) || 0, angle = parseFloat(angle_flow) || 0;
+        if (angle !== 0) vel = vel * Math.cos(angle * Math.PI / 180); // 偏角修正
+        return (depth > 0 && depth < 0.2) ? this.bankersRound(vel * 0.9, 3) : this.bankersRound(vel, 3); 
+    },
+    // 修复问题9：自动计算绝对位置
+    calcAbsPosition(appDepth, relPos) { return this.bankersRound((parseFloat(appDepth) || 0) * (parseFloat(relPos) || 0), 2); },
+    // 平均流速计算保持不变
+    calcMeanVelocity(measurePoints, method) {
+        if (!measurePoints || measurePoints.length === 0) return 0;
+        const v = measurePoints.map(p => parseFloat(p.cor_qv) || 0);
+        let meanV = 0;
+        if (method === '1' && v.length >= 1) meanV = v[0];
+        else if (method === '2' && v.length >= 2) meanV = (v[0] + v[1]) / 2;
+        else if (method === '3' && v.length >= 3) meanV = (v[0] + 2 * v[1] + v[2]) / 4;
+        else if (method === '5' && v.length >= 5) meanV = (v[0] + 3 * v[1] + 2 * v[2] + 3 * v[3] + v[4]) / 10;
+        else meanV = v.reduce((a, b) => a + b, 0) / v.length;
+        return this.bankersRound(meanV, 3);
+    },
+    calculateSection(verticals) {
+        let totalArea = 0, totalDischarge = 0, totalSedimentRate = 0, parts = []; 
+        if (!verticals || verticals.length < 2) return { totalArea: 0, totalDischarge: 0, totalSedimentRate: 0, parts: [] };
+        for (let i = 1; i < verticals.length; i++) {
+            const v1 = verticals[i - 1], v2 = verticals[i];
+            const deltaL = Math.abs((parseFloat(v2.dis) || 0) - (parseFloat(v1.dis) || 0));
+            const partArea = (((parseFloat(v1.app_dp) || 0) + (parseFloat(v2.app_dp) || 0)) / 2) * deltaL;
+            const partDischarge = partArea * (((parseFloat(v1.mean_qv) || 0) + (parseFloat(v2.mean_qv) || 0)) / 2);
+            const partSedimentRate = partDischarge * (((parseFloat(v1.sediment) || 0) + (parseFloat(v2.sediment) || 0)) / 2);
+            totalArea += partArea; totalDischarge += partDischarge; totalSedimentRate += partSedimentRate;
+            parts.push({ index: i, area: partArea, discharge: partDischarge, sedimentRate: partSedimentRate });
+        }
+        return { totalArea, totalDischarge, totalSedimentRate, parts };
+    }
+};
 
         /* --------------------------------------------------------------------------
            第二层：状态管理层 (AppState)
@@ -353,7 +385,12 @@
                     if (v.type === 'start_bank' || v.type === 'end_bank') { v.obdp = 0; v.ice_thick = 0; v.app_dp = 0; v.mean_qv = 0; } 
                     else {
                         v.app_dp = HydroEngine.calcAppDepth(v.obdp, v.ice_thick, period);
-                        v.measurePoints.forEach(pt => { pt.abs_pos = HydroEngine.calcAbsPosition(v.app_dp, pt.rel_pos); pt.cor_qv = HydroEngine.calcCorrectedVelocity(pt.raw_qv, v.app_dp); });
+                        v.measurePoints.forEach(pt => { 
+                            // 修复问题8：如果是封冻期且相对位置为空，强制默认为0.5
+                            if(period === 'ice' && pt.rel_pos === '') pt.rel_pos = 0.5; 
+                            pt.abs_pos = HydroEngine.calcAbsPosition(v.app_dp, pt.rel_pos); 
+                            pt.cor_qv = HydroEngine.calcCorrectedVelocity(pt.raw_qv, v.app_dp, v.angle_flow); // 引入偏角
+                        });
                         v.mean_qv = HydroEngine.calcMeanVelocity(v.measurePoints, method);
                     }
                 });
@@ -387,6 +424,14 @@
 
             bindEvents() {
                 // 弹窗控制
+                // 点击背景关闭弹窗
+                document.querySelectorAll('.overlay').forEach(overlay => {
+                    overlay.addEventListener('click', (e) => {
+                        if (e.target === overlay) {
+                            overlay.classList.remove('active');
+                        }
+                    });
+                });
                 document.getElementById('btn-open-settings').addEventListener('click', () => {
                     this.uiGlobalWl.value = AppState.data.settings.globalWl;
                     this.uiPeriod.value = AppState.data.settings.period;
@@ -545,16 +590,32 @@
 
             handleInsertPoint(vindex) {
                 const verticals = AppState.data.verticals;
-                let step = AppState.data.settings.currentStep || 3.0; 
                 const prevV = verticals[vindex];
+                let step = AppState.data.settings.currentStep || 3.0; 
+                
+                // 修复问题5：自动计算上一条垂线差值
+                if (vindex >= 1) {
+                    const prevPrevV = verticals[vindex - 1];
+                    if (prevV.dis !== '' && prevPrevV.dis !== '') {
+                        step = Math.abs(parseFloat(prevV.dis) - parseFloat(prevPrevV.dis));
+                        AppState.data.settings.currentStep = step; // 保存当前工作步长
+                    }
+                }
+
                 const currDis = parseFloat(prevV.dis) || 0;
                 const newV = AppState.createVertical('normal', '');
-                newV.dis = parseFloat((currDis + step).toFixed(1));
+                newV.dis = parseFloat((currDis + step).toFixed(2));
                 
-                // 继承流向偏角和相对位置
+                // 修复问题6：完整继承上一条垂线的参数
+                newV.obdp = prevV.obdp;
+                newV.ice_thick = prevV.ice_thick;
                 newV.angle_flow = prevV.angle_flow;
+                
                 if (prevV.type === 'normal' && prevV.measurePoints.length === newV.measurePoints.length) {
-                    newV.measurePoints.forEach((pt, i) => { pt.rel_pos = prevV.measurePoints[i].rel_pos; });
+                    newV.measurePoints.forEach((pt, i) => { 
+                        pt.rel_pos = prevV.measurePoints[i].rel_pos;
+                        // 测得流速一般不继承，以免造成假数据隐患，仅继承位置结构
+                    });
                 }
                 
                 verticals.splice(vindex + 1, 0, newV);
@@ -595,19 +656,18 @@
                     const areaInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partArea"]`);
                     const qInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partQ"]`);
                     const sInput = this.gridBody.querySelector(`input[data-vindex="${part.index}"][data-field="partS"]`);
-                    if (areaInput) areaInput.value = HydroEngine.formatValue(part.area, 'area');
-                    if (qInput) qInput.value = HydroEngine.formatValue(part.discharge, 'discharge');
-                    if (sInput) sInput.value = HydroEngine.formatValue(part.sedimentRate, 'discharge');
+                    if (areaInput) areaInput.value = HydroEngine.formatGB(part.area, 'area');
+                    if (qInput) qInput.value = HydroEngine.formatGB(part.discharge, 'discharge');
+                    if (sInput) sInput.value = HydroEngine.formatGB(part.sedimentRate, 'sediment');
                 });
             },
 
             updateDashboard() {
                 const result = HydroEngine.calculateSection(AppState.data.verticals);
-                this.uiTotalArea.textContent = HydroEngine.formatValue(result.totalArea, 'area');
-                this.uiTotalQ.textContent = HydroEngine.formatValue(result.totalDischarge, 'discharge');
-                this.uiTotalS.textContent = HydroEngine.formatValue(result.totalSedimentRate, 'discharge');
+                this.uiTotalArea.textContent = HydroEngine.formatGB(result.totalArea, 'area');
+                this.uiTotalQ.textContent = HydroEngine.formatGB(result.totalDischarge, 'discharge');
+                this.uiTotalS.textContent = HydroEngine.formatGB(result.totalSedimentRate, 'sediment');
             },
-
             renderGrid() {
                 const isIce = AppState.data.settings.period === 'ice';
                 if (isIce) this.gridHeader.classList.add('show-ice'); else this.gridHeader.classList.remove('show-ice');
