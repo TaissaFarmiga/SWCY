@@ -1,29 +1,17 @@
-/**
- * 测点流速输入行 v2.0 — 符号降维 & 液态胶囊合并
- *
- * 核心重构：
- * 1. 汉字 → 物理符号：相对→▾, 绝对→⇊, 流速→Vitalic
- * 2. 深度合并胶囊：[▾ inp ∣ ⇊ inp] 单边框
- * 3. N/T 合并胶囊：[N inp ∣ T inp] 单边框
- * 4. 流速输入高亮：微蓝底色 + focus-within:ring-1
- * 5. 野外单手全选：全部 input onFocus={e => e.target.select()}
- */
 import { motion } from 'framer-motion';
 import { RefreshCw, Calculator } from 'lucide-react';
 import { MeasurePoint, VelocityInputMode } from '../types';
 import { useHydroStore } from '../store/hydroStore';
 import { calculateVelocityFromFormula } from '../lib/HydroEngine';
 import { roundVelocity } from '../lib/rounding';
-import { Decimal } from 'decimal.js';
 
 interface Props {
   verticalId: string;
   point: MeasurePoint;
   index: number;
-  effectiveDepth?: string;
 }
 
-export default function MeasureRow({ verticalId, point, index, effectiveDepth }: Props) {
+export default function MeasureRow({ verticalId, point, index }: Props) {
   const updateMeasurePoint = useHydroStore((s) => s.updateMeasurePoint);
   const meterFormula = useHydroStore((s) => s.currentRun.meterFormula);
 
@@ -42,112 +30,164 @@ export default function MeasureRow({ verticalId, point, index, effectiveDepth }:
 
   const handleNChange = (value: string) => {
     const updates: Partial<MeasurePoint> = { n: value };
-    if (value && t) { const tv = parseFloat(t); if (!isNaN(tv) && tv > 0) updates.velocity = roundVelocity(calculateVelocityFromFormula(value, t, meterFormula)); }
+    if (value && t) { 
+      const tv = parseFloat(t); 
+      if (!isNaN(tv) && tv > 0) updates.velocity = roundVelocity(calculateVelocityFromFormula(value, t, meterFormula)); 
+    }
     updateMeasurePoint(verticalId, point.id, updates);
   };
 
   const handleTChange = (value: string) => {
     const updates: Partial<MeasurePoint> = { t: value };
-    if (n && value) { const tv = parseFloat(value); if (!isNaN(tv) && tv > 0) updates.velocity = roundVelocity(calculateVelocityFromFormula(n, value, meterFormula)); }
+    if (n && value) { 
+      const tv = parseFloat(value); 
+      if (!isNaN(tv) && tv > 0) updates.velocity = roundVelocity(calculateVelocityFromFormula(n, value, meterFormula)); 
+    }
     updateMeasurePoint(verticalId, point.id, updates);
-  };
-
-  const handleAbsoluteDepthChange = (value: string) => {
-    updateMeasurePoint(verticalId, point.id, { absoluteDepth: value });
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: index * 0.02 }}
-      className="flex items-center gap-1.5 px-1 py-0.5 rounded-lg bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/80 dark:border-gray-700/60 shadow-sm min-w-0 overflow-x-auto no-scrollbar"
+      initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02 }}
+      className="flex flex-col gap-1.5 px-1 py-1 rounded-lg bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-slate-200/60 dark:border-gray-700/50 shadow-sm overflow-hidden w-full min-w-0"
     >
-      {/* ▾▾▾ 深度合并胶囊 [▾ inp ∣ ⇊ inp] ▾▾▾ */}
-      <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-800/80 border border-slate-200/60 dark:border-gray-700/60 overflow-hidden shrink-0">
-        {/* 相对深度 */}
-        <div className="flex items-center gap-0.5 px-1">
-          <span className="text-[10px] text-hydro-blue dark:text-cyan-400 font-bold select-none leading-none">▾</span>
-          <input type="number" inputMode="decimal" step="0.1" min="0" max="1"
-            value={point.relativeDepth}
-            onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
-            onFocus={(e) => e.target.select()}
-            className="w-9 px-0.5 py-0.5 text-xs bg-transparent dark:text-slate-200 text-center font-mono text-hydro-blue dark:text-cyan-400 font-medium outline-none"
-          />
-        </div>
-
-        {/* w-px 分割线 */}
-        <div className="w-px h-4 bg-slate-200 dark:bg-gray-600 shrink-0" />
-
-        {/* 绝对深度 */}
-        <div className="flex items-center gap-0.5 px-1">
-          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold select-none leading-none">⇊</span>
-          <input type="number" inputMode="decimal" step="0.01" min="0" placeholder="--"
-            value={point.absoluteDepth || ''}
-            onChange={(e) => handleAbsoluteDepthChange(e.target.value)}
-            onFocus={(e) => e.target.select()}
-            className="w-10 px-0.5 py-0.5 text-xs bg-transparent dark:text-slate-200 text-center font-mono text-slate-500 dark:text-slate-300 outline-none"
-          />
-        </div>
-      </div>
-
-      {/* ▾▾▾ 流速区域（条件渲染）▾▾▾ */}
-      {mode === 'direct' ? (
-        /* 直接输入模式：高亮流速输入框 */
-        <div className="flex items-center gap-0.5 rounded-lg bg-blue-50/60 dark:bg-cyan-950/30 border border-blue-200/50 dark:border-cyan-800/50 px-1.5 py-0.5 shrink-0 focus-within:border-blue-400 focus-within:ring-1 focus-within:ring-blue-400/30 transition-shadow">
-          <span className="text-[10px] text-blue-500 dark:text-cyan-400 font-bold italic select-none leading-none">V</span>
-          <input type="number" inputMode="decimal" step="0.001" min="0" placeholder="0.000"
-            value={point.velocity} onChange={(e) => handleVelocityChange(e.target.value)}
-            onFocus={(e) => e.target.select()}
-            className="w-12 px-0.5 py-0.5 text-xs bg-transparent text-center font-mono font-bold text-blue-600 dark:text-cyan-300 outline-none"
-          />
-          <span className="text-[9px] text-blue-400 dark:text-cyan-500/70 font-medium">m/s</span>
-        </div>
-      ) : (
-        /* 公式模式：N/T 合并胶囊 + 右侧只读结果 */
-        <div className="flex items-center gap-1 shrink-0">
-          {/* N/T 合并胶囊 */}
-          <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-800/80 border border-slate-200/60 dark:border-gray-700/60 overflow-hidden">
-            {/* N 转数 */}
-            <div className="flex items-center gap-0.5 px-1">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold select-none leading-none">N</span>
-              <input type="number" inputMode="numeric" step="1" min="0" placeholder="0"
-                value={n} onChange={(e) => handleNChange(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                className="w-9 px-0.5 py-0.5 text-xs bg-transparent dark:text-slate-200 text-center font-mono outline-none"
+      {/* ========= 公式模式：第一行 [ Kα | ▾⇊ | 🔄(靠右) ] ========= */}
+      {mode === 'formula' && (
+        <>
+          <div className="flex items-center gap-1.5 w-full min-w-0">
+            {/* Kα */}
+            <div className="flex items-center px-1 py-0.5 rounded bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 shrink-0">
+              <span className="text-[9px] text-slate-400 font-medium mr-0.5">Kα</span>
+              <input
+                type="text" inputMode="decimal" step="0.01" min="0" max="1"
+                value={(() => {
+                  const v = useHydroStore.getState().currentRun.verticals.find(v => v.id === verticalId);
+                  return v?.deflectionCoefficient || '1.0';
+                })()}
+                onChange={(e) => {
+                  useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
+                }}
+                className="w-8 bg-transparent text-[10px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none border border-blue-200/60 dark:border-blue-700/40 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 shadow-inner rounded"
               />
             </div>
 
-            {/* w-px 分割线 */}
-            <div className="w-px h-4 bg-slate-200 dark:bg-gray-600 shrink-0" />
+            {/* 深度胶囊 */}
+            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden shrink-0">
+              <div className="flex items-center px-1 py-0.5 bg-blue-50/50 dark:bg-cyan-900/20 focus-within:bg-blue-100/50 transition-colors">
+                <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5">▾</span>
+                <input type="text" inputMode="decimal" step="0.1" value={point.relativeDepth}
+                  onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
+                  className="w-7 bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
+              </div>
+              <div className="w-px h-3.5 bg-slate-200 dark:bg-gray-600 shrink-0" />
+              <div className="flex items-center px-1 py-0.5 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5">⇊</span>
+                <input type="text" inputMode="decimal" step="0.01" value={point.absoluteDepth || ''}
+                  onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
+                  placeholder="--"
+                  className="w-8 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
+              </div>
+            </div>
 
-            {/* T 历时 */}
-            <div className="flex items-center gap-0.5 px-1">
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold select-none leading-none">T</span>
-              <input type="number" inputMode="decimal" step="1" min="1" placeholder="100"
-                value={t} onChange={(e) => handleTChange(e.target.value)}
-                onFocus={(e) => e.target.select()}
-                className="w-9 px-0.5 py-0.5 text-xs bg-transparent dark:text-slate-200 text-center font-mono outline-none"
+            {/* 模式切换按钮推到最右 */}
+            <button onClick={handleModeToggle} className="p-1 rounded bg-blue-500 text-white shadow-sm shrink-0 ml-auto transition-colors">
+              <Calculator className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* ========= 公式模式：第二行 [ N|T 胶囊 ] → [ V 计算结果 ] ========= */}
+          <div className="flex items-center gap-1.5 w-full min-w-0">
+            {/* N|T 胶囊 — 放大版 */}
+            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden shrink-0">
+              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
+                <span className="text-[10px] text-slate-400 font-medium mr-1">N</span>
+                <input type="text" inputMode="numeric" value={n}
+                  onChange={(e) => handleNChange(e.target.value)}
+                  className="w-10 bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+              </div>
+              <div className="w-px h-4 bg-slate-200 dark:bg-gray-600 shrink-0" />
+              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
+                <span className="text-[10px] text-slate-400 font-medium mr-1">T</span>
+                <input type="text" inputMode="decimal" value={t}
+                  onChange={(e) => handleTChange(e.target.value)}
+                  className="w-12 bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+              </div>
+            </div>
+
+            {/* 小箭头 */}
+            <span className="text-sm text-slate-300 dark:text-slate-600 shrink-0 font-bold">→</span>
+
+            {/* V 计算结果胶囊 — 放大拉伸 */}
+            <div className="flex items-start flex-wrap justify-center px-2 py-1 rounded bg-blue-50 dark:bg-cyan-900/30 border border-blue-100 dark:border-cyan-800 flex-1 min-w-0">
+              <span className="font-mono text-[14px] font-black text-blue-700 dark:text-cyan-300 break-all">
+                {point.velocity ? point.velocity : '--'}
+              </span>
+              <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap ml-1">m/s</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ========= 直接输入模式：双容器响应式布局 [ 左侧参数块 | 右侧流速组合 ] ========= */}
+      {mode === 'direct' && (
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 w-full">
+          {/* 左侧参数块：Kα + 深度连体胶囊 */}
+          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-0">
+            {/* 1. Kα 输入块 - 极简锁死宽度 */}
+            <div className="flex items-center justify-center px-1 py-1 rounded bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[50px] shrink-0 shadow-sm">
+              <span className="text-[9px] text-slate-400 font-medium mr-0.5">Kα</span>
+              <input
+                type="text" inputMode="decimal"
+                value={(() => {
+                  const v = useHydroStore.getState().currentRun.verticals.find(v => v.id === verticalId);
+                  return v?.deflectionCoefficient || '1.0';
+                })()}
+                onChange={(e) => {
+                  useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
+                }}
+                className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
               />
+            </div>
+
+            {/* 2. 深度连体胶囊 (相对 + 绝对) - 消除间隙释放空间 */}
+            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-0 divide-x divide-slate-200/50 dark:divide-gray-700/50">
+              <div className="flex items-center px-1 py-1 flex-1 min-w-0">
+                <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
+                <input type="text" inputMode="decimal" value={point.relativeDepth}
+                  onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
+                  className="w-full min-w-0 bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
+              </div>
+              <div className="flex items-center px-1 py-1 flex-1 min-w-0">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
+                <input type="text" inputMode="decimal" value={point.absoluteDepth || ''}
+                  onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
+                  placeholder="--"
+                  className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
+              </div>
             </div>
           </div>
 
-          {/* 计算结果只读胶囊 */}
-          <div className="flex items-baseline gap-0.5 rounded-lg bg-blue-50/60 dark:bg-cyan-950/30 border border-blue-200/50 dark:border-cyan-800/50 px-1.5 py-0.5 shrink-0">
-            <span className="font-mono text-xs text-hydro-blue dark:text-cyan-400 font-bold">{point.velocity || '--'}</span>
-            <span className="text-[9px] text-blue-400 dark:text-cyan-500/70 font-medium">m/s</span>
+          {/* 右侧流速组合容器: V输入框 + 模式切换按钮 */}
+          <div className="flex items-center gap-1.5 whitespace-nowrap grow flex-1 min-w-[105px]">
+            {/* V 直接输入 (仅微调 pr-9 让出一个数字的宽度 10px) */}
+            <div className="relative flex-1 min-w-0">
+              <input
+                type="text" inputMode="decimal"
+                value={point.velocity}
+                onChange={(e) => handleVelocityChange(e.target.value)}
+                placeholder=""
+                className="w-full pl-1.5 pr-9 py-1 rounded bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+              />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
+            </div>
+
+            {/* 模式切换按钮 */}
+            <button onClick={handleModeToggle} className="p-1.5 rounded bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       )}
-
-      {/* ▾▾▾ 模式切换按钮 ▾▾▾ */}
-      <button onClick={handleModeToggle}
-        className={`p-1 rounded-md transition-colors shrink-0 ${
-          mode === 'formula'
-            ? 'bg-hydro-blue text-white shadow-sm'
-            : 'bg-slate-100 dark:bg-gray-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-gray-600'
-        }`}
-        title={mode === 'direct' ? '切换为公式计算' : '切换为直接输入'}>
-        {mode === 'direct' ? <RefreshCw className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
-      </button>
     </motion.div>
   );
 }

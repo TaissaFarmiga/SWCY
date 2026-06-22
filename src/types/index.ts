@@ -76,6 +76,7 @@ export interface Vertical {
   correctedVelocity?: string;
   partialArea?: string;
   partialDischarge?: string;
+  partialMeanVelocity?: string;
   totalSedimentDischarge?: string;
   meanSedimentConc?: string;
   isExpanded?: boolean;

@@ -12,7 +12,6 @@
  * 岸边系数：左 0.70 右 0.70（默认平缓岸）
  */
 
-import { Decimal } from 'decimal.js';
 import { processRun, createNewRun } from './HydroEngine';
 import type { Run } from '../types';
 
@@ -153,7 +152,7 @@ export function runZhengJiaTunBenchmark() {
   // 打印梯级明细
   console.log('');
   console.log('=== 梯级明细 ===');
-  result.verticals.forEach((v, i) => {
+  result.verticals.forEach((v: { verticalNumber: string; type: string; startDistance: string; waterDepth: string; effectiveDepth?: string; correctedVelocity?: string; partialArea?: string; partialDischarge?: string; name?: string }, _i: number) => {
     if (v.type === 'measure') {
       console.log(
         `${v.verticalNumber.padStart(2)} 起点距=${v.startDistance.padStart(5)}  水深=${v.waterDepth.padStart(5)}  有效水深=${(v.effectiveDepth||'').padStart(6)}  修正流速=${(v.correctedVelocity||'').padStart(6)}  部分面积=${(v.partialArea||'').padStart(6)}  部分流量=${(v.partialDischarge||'').padStart(7)}`

@@ -5,7 +5,7 @@
  * 不再清空冰厚数据。
  */
 import { motion } from 'framer-motion';
-import { Sun, Snowflake } from 'lucide-react';
+import { Sun, Snowflake, Settings } from 'lucide-react';
 import { FlowPeriod } from '../types';
 import { useHydroStore } from '../store/hydroStore';
 import { createDefaultMeasurePoints } from '../lib/HydroEngine';
@@ -14,6 +14,7 @@ export default function PeriodToggle() {
   const flowPeriod = useHydroStore((s) => s.currentRun.flowPeriod);
   const updateRun = useHydroStore((s) => s.updateRun);
   const currentRun = useHydroStore((s) => s.currentRun);
+  const toggleMetaPanel = useHydroStore((s) => s.toggleMetaPanel);
 
   const handleToggle = (period: FlowPeriod) => {
     if (period === flowPeriod) return;
@@ -76,6 +77,14 @@ export default function PeriodToggle() {
           {flowPeriod === 'ice' && <motion.div layoutId="period-bg" className="absolute inset-0 bg-hydro-blue rounded-md" transition={{ duration: 0.2 }} />}
           <Snowflake className="relative w-3.5 h-3.5" />
           <span className="relative font-medium">冰期</span>
+        </button>
+        {/* 齿轮：设置与元信息面板 */}
+        <button
+          onClick={toggleMetaPanel}
+          className="ml-1 p-1.5 rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-600/50 text-slate-500 dark:text-slate-400 hover:text-hydro-blue dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+          title="设置与元信息"
+        >
+          <Settings className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

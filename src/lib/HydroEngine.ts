@@ -47,8 +47,8 @@ export function roundGbDischarge(val: Decimal): number {
     return r.toNumber();
 }
 
-export function calculateAbsolutePosition(effD: Decimal, rd: string): Decimal {
-    return effD.times(safeDecimal(rd));
+export function calculateAbsolutePosition(effD: Decimal, rd: string, waterIceThickness: Decimal = new Decimal(0)): Decimal {
+    return waterIceThickness.plus(effD.times(safeDecimal(rd)));
 }
 
 // ============================================================================
@@ -184,18 +184,29 @@ export function processRun(run: any): any {
     let totalAreaDec = new Decimal(0);
     let totalDischargeDec = new Decimal(0);
     let maxDepth = 0;
-    let maxVel = 0;
+
+    // 🔪 物理算法校准：遍历全断面所有测点，抓取纯正、未折减的物理测点最大流速
+    let maxVelDec = new Decimal(0);
+    verticals.forEach((v: any) => {
+        if (v.type === 'measure' && v.measurePoints) {
+            v.measurePoints.forEach((mp: any) => {
+                const ptVel = calculatePointVelocity(mp, meterFormula);
+                if (ptVel.greaterThan(maxVelDec)) {
+                    maxVelDec = ptVel;
+                }
+            });
+        }
+    });
+    const maxVelVal = maxVelDec.toNumber();
 
     const outputVerticals = run.verticals.map((ov: any) => {
         const s = resultDict.get(ov.id);
         if (!s) return { ...ov };
 
         const edNum = s.effDec.toNumber();
-        const cvNum = s.velDec.toNumber();
 
         if (ov.type === 'measure') {
             if (edNum > maxDepth) maxDepth = edNum;
-            if (cvNum > maxVel) maxVel = cvNum;
         }
 
         totalAreaDec = totalAreaDec.plus(s.areaNum);
@@ -208,9 +219,15 @@ export function processRun(run: any): any {
             correctedVelocity: ov.type.includes('bank') || ov.type === 'edge' ? '0.00' : String(roundGbVelocity(s.velDec)),
             partialArea: safeDecimal(s.areaNum).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toString(),
             partialDischarge: safeDecimal(s.dischargeNum).toDecimalPlaces(3, Decimal.ROUND_HALF_EVEN).toString(),
+            // 👇 新增解封字段：部分平均流速（直接取修约好的值）
+            partialMeanVelocity: s.meanVelNum !== undefined ? String(s.meanVelNum) : '0',
             measurePoints: (ov.measurePoints || []).map((mp: any) => ({
                 ...mp,
-                absoluteDepth: calculateAbsolutePosition(s.effDec, mp.relativeDepth).toDecimalPlaces(2).toFixed(2)
+                absoluteDepth: calculateAbsolutePosition(
+                    s.effDec, 
+                    mp.relativeDepth, 
+                    safeDecimal(ov.waterIceThickness)
+                ).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toFixed(2)
             }))
         };
     });
@@ -238,7 +255,7 @@ export function processRun(run: any): any {
         meanVelocity: meanVelocityStr,
         surfaceWidth: surfaceWidth,
         maxDepth: maxDepth.toFixed(2),
-        maxVelocity: maxVel.toFixed(2)
+        maxVelocity: maxVelVal.toFixed(2) // 精准对齐 0.43 原始物理流速
     };
 }
 
