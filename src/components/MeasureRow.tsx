@@ -132,7 +132,7 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
       {mode === 'direct' && (
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 w-full">
           {/* 左侧参数块：Kα + 深度连体胶囊 */}
-          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-0">
+          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-[135px]">
             {/* 1. Kα 输入块 - 极简锁死宽度 */}
             <div className="flex items-center justify-center px-1 py-1 rounded bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[50px] shrink-0 shadow-sm">
               <span className="text-[9px] text-slate-400 font-medium mr-0.5">Kα</span>
@@ -145,24 +145,24 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
                 }}
-                className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
+                className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
               />
             </div>
 
             {/* 2. 深度连体胶囊 (相对 + 绝对) - 消除间隙释放空间 */}
-            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-0 divide-x divide-slate-200/50 dark:divide-gray-700/50">
-              <div className="flex items-center px-1 py-1 flex-1 min-w-0">
+            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[40px] divide-x divide-slate-200/50 dark:divide-gray-700/50">
+              <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" value={point.relativeDepth}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
-                  className="w-full min-w-0 bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
+                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
               </div>
-              <div className="flex items-center px-1 py-1 flex-1 min-w-0">
+              <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
                 <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
                 <input type="text" inputMode="decimal" value={point.absoluteDepth || ''}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
                   placeholder="--"
-                  className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
+                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
               </div>
             </div>
           </div>
@@ -170,13 +170,13 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
           {/* 右侧流速组合容器: V输入框 + 模式切换按钮 */}
           <div className="flex items-center gap-1.5 whitespace-nowrap grow flex-1 min-w-[105px]">
             {/* V 直接输入 (仅微调 pr-9 让出一个数字的宽度 10px) */}
-            <div className="relative flex-1 min-w-0">
+            <div className="relative flex-1 min-w-[140px]">
               <input
                 type="text" inputMode="decimal"
                 value={point.velocity}
                 onChange={(e) => handleVelocityChange(e.target.value)}
                 placeholder=""
-                className="w-full pl-1.5 pr-9 py-1 rounded bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+                className="w-full min-w-[65px] pl-1.5 pr-9 py-1 rounded bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
               />
               <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
             </div>
