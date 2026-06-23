@@ -68,25 +68,25 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
                 }}
-                className="w-full bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
+                className="w-full bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent"
               />
             </div>
 
-            {/* 深度胶囊 - 自动比例填充 */}
-            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-[1.5] min-w-[110px] focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
-              <div className="flex items-center px-1 py-0.5 bg-blue-50/50 dark:bg-cyan-900/20 focus-within:bg-blue-100/50 transition-colors">
-                <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5">▾</span>
+            {/* 深度胶囊 - 自动比例填充并锁定子胶囊物理下限 */}
+            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-[1.5] min-w-[125px] focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
+              <div className="flex items-center px-1 py-0.5 bg-blue-50/50 dark:bg-cyan-900/20 focus-within:bg-blue-100/50 transition-colors flex-1 min-w-[50px]">
+                <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" step="0.1" value={point.relativeDepth}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
-                  className="w-7 bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
+                  className="w-full bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
               </div>
               <div className="w-px h-3.5 bg-slate-200 dark:bg-gray-600 shrink-0" />
-              <div className="flex items-center px-1 py-0.5 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
-                <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5">⇊</span>
+              <div className="flex items-center px-1 py-0.5 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors flex-1 min-w-[60px]">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
                 <input type="text" inputMode="decimal" step="0.01" value={point.absoluteDepth || ''}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
                   placeholder="--"
-                  className="w-8 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
+                  className="w-full bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
               </div>
             </div>
 
@@ -104,14 +104,14 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 <span className="text-[10px] text-slate-400 font-bold mr-1">N</span>
                 <input type="text" inputMode="numeric" value={n}
                   onChange={(e) => handleNChange(e.target.value)}
-                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent" />
               </div>
               <div className="w-px h-4 bg-slate-200 dark:bg-gray-600 shrink-0" />
               <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors flex-1">
                 <span className="text-[10px] text-slate-400 font-bold mr-1">T</span>
                 <input type="text" inputMode="decimal" value={t}
                   onChange={(e) => handleTChange(e.target.value)}
-                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent" />
               </div>
             </div>
 
@@ -147,7 +147,7 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
                 }}
-                className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
+                className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent"
               />
             </div>
 
@@ -157,14 +157,14 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" value={point.relativeDepth}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
-                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold outline-none text-center" />
+                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
               </div>
               <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
                 <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
                 <input type="text" inputMode="decimal" value={point.absoluteDepth || ''}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
                   placeholder="--"
-                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 outline-none text-center" />
+                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
               </div>
             </div>
           </div>

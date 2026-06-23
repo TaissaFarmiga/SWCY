@@ -554,7 +554,7 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.92, y: -4 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute right-0 top-full mt-1.5 w-56 rounded-2xl 
+                      className="absolute right-[-32px] md:right-0 top-full mt-1.5 w-52 rounded-2xl 
                         bg-white/75 dark:bg-gray-800/75 
                         backdrop-blur-xl 
                         border border-white/30 dark:border-gray-700/60 
