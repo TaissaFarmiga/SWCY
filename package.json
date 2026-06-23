@@ -1,7 +1,7 @@
 {
   "name": "vite-react-typescript-starter",
   "private": true,
-  "version": "1.10.3",
+  "version": "1.10.4",
   "type": "module",
   "scripts": {
     "release": "node scripts/deploy-github.cjs",

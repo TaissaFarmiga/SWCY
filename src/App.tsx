@@ -343,20 +343,44 @@ export default function App() {
     console.log("[APP DEBUG] platform =", Capacitor.getPlatform());
   }, []);
 
-  /* ── 键盘滚动避让装甲：当输入框聚焦时，卡片底部边缘精确吸附于软键盘上方 24px 安全区 ── */
+  /* ── 1. H5 视口物理拟合与过卷阻断：基于 VisualViewport 的垫底补偿与自适应恢复（唯一布局驱动源） ── */
+  useEffect(() => {
+    // 动态注入 overscroll-behavior 阻止 Android 原生回弹造成的二次链式抖动
+    document.documentElement.style.overscrollBehavior = 'contain';
+    document.body.style.overscrollBehavior = 'contain';
+
+    const handleViewportResize = () => {
+      if (!window.visualViewport) return;
+      
+      // 工业级裁剪：防范负值、Jitter 以及部分 Android 设备的视口微弱回弹
+      const keyboardHeight = Math.max(
+        0,
+        window.innerHeight - window.visualViewport.height
+      );
+      
+      // 动态注入真实键盘高度 + 16px 物理安全缓冲，彻底解决底部（如右水边）滚不动的死锁
+      // 当键盘收起时，keyboardHeight 自动归零，body 垫底自然恢复，无须任何 focusout 逻辑干预
+      document.body.style.paddingBottom = keyboardHeight > 0 ? `${keyboardHeight + 16}px` : '0px';
+    };
+
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.overscrollBehavior = '';
+    };
+  }, []);
+
+  /* ── 2. 帧同步单一输入框避让（requestAnimationFrame 零延时竞争） ── */
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
       if (target && target.tagName === 'INPUT') {
-        const card = target.closest('[id^="vertical-"]') as HTMLElement;
-        if (card) {
-          // 动态注入 24px 原生滚动底部保护边距，让卡片底部安全浮动，绝不紧贴键盘
-          card.style.scrollMarginBottom = '24px';
-          setTimeout(() => {
-            // block: 'end' 强制将卡片下边缘（含计算结果与右水边）对齐到可视视口最底部
-            card.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 260); // 260ms 延迟，避开 Android 软键盘弹出时造成的布局拉伸滞后
-        }
+        // 强制将 scrollIntoView 挂载到浏览器的下一渲染帧（rAF），
+        // 彻底消灭 setTimeout 的毫秒竞争与系统默认滚动的双重重叠抖动
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        });
       }
     };
     document.addEventListener('focusin', handleFocusIn);
@@ -526,7 +550,7 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 focus-within:pb-[50vh] transition-[padding,colors] duration-300"
+      className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 transition-[padding,colors] duration-300"
       style={{
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
