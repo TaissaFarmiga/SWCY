@@ -73,12 +73,12 @@ function DistanceInput({
   isShallow?: boolean; placeholder?: string; additionalClass?: string;
 }) {
   return (
-    <div className="flex-1 min-w-0 flex items-center gap-1">
+    <div className="flex-1 min-w-[100px] flex items-center gap-1">
       <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap flex-shrink-0">起点距</span>
       <div className="relative w-full">
         <input type="text" inputMode="decimal" step="0.01" min="0" placeholder={placeholder || ''}
           value={value} onChange={(e) => onChange(e.target.value)}
-          className={`w-full min-w-0 px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
+          className={`w-full min-w-[60px] px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
             isDistanceError
               ? 'border border-red-500 text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 dark:border-red-500'
               : isShallow
@@ -109,7 +109,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="rounded-lg bg-gradient-to-r from-amber-50/90 to-orange-50/70 dark:from-amber-950/80 dark:to-orange-950/70 border border-amber-200/60 dark:border-amber-800/40 overflow-hidden"
     >
-      <div className="w-full flex items-center justify-between gap-3 px-1.5 py-1">
+      <div className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1.5 py-2">
         <button onClick={swapEdges}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100/60 dark:bg-amber-900/40 hover:bg-amber-200/60 dark:hover:bg-amber-800/40 transition-colors flex-shrink-0"
           title="点击互换左右水边">
@@ -252,7 +252,7 @@ function MeasureCard({ vertical, index }: Props) {
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="rounded-lg bg-white/70 dark:bg-gray-900/70 border border-white/80 dark:border-gray-700/80 overflow-hidden"
     >
-      <div className="w-full flex items-center justify-between gap-2 px-1.5 py-1 border-b border-slate-100/50 dark:border-gray-700/50">
+      <div className="w-full flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-1.5 py-2 border-b border-slate-100/50 dark:border-gray-700/50">
         <div className="flex items-center justify-center w-5 h-5 rounded-md bg-hydro-blue text-white text-sm font-bold flex-shrink-0">
           {measureIndex}
         </div>
@@ -262,12 +262,12 @@ function MeasureCard({ vertical, index }: Props) {
           isDistanceError={isDistanceError}
           isShallow={isShallow}
         />
-        <div className="flex-1 min-w-0 flex items-center gap-1">
+        <div className="flex-1 min-w-[90px] flex items-center gap-1">
           <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap flex-shrink-0">水深</span>
           <div className="relative w-full">
             <input type="text" inputMode="decimal" step="0.001" min="0" placeholder=""
               value={vertical.waterDepth} onChange={(e) => updateVertical(vertical.id, { waterDepth: e.target.value })}
-              className={`w-full min-w-0 px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
+              className={`w-full min-w-[50px] px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
                 isShallow ? 'border border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/50' : 'border border-slate-300 dark:border-gray-600 focus-within:border-hydro-blue'
               }`}
             />
@@ -283,7 +283,7 @@ function MeasureCard({ vertical, index }: Props) {
 
       {/* 冰期参数探测层 (极致瘦身版) */}
       {flowPeriod === 'ice' && (
-        <div className="flex items-center justify-between gap-1.5 px-2 py-1 bg-cyan-50/40 dark:bg-cyan-950/20 border-b border-cyan-100/50 dark:border-cyan-900/50">
+        <div className="flex flex-wrap items-center justify-between gap-x-1.5 gap-y-2 px-2 py-2 bg-cyan-50/40 dark:bg-cyan-950/20 border-b border-cyan-100/50 dark:border-cyan-900/50">
           <IceField 
             label="冰厚" 
             value={vertical.iceThickness || ''} 
@@ -351,9 +351,9 @@ function MeasureCard({ vertical, index }: Props) {
 
 function IceField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <div className="flex items-center gap-1 flex-1 min-w-0">
+    <div className="flex items-center gap-1 flex-1 min-w-[80px]">
       <span className="text-[10px] font-medium text-cyan-700 dark:text-cyan-500 shrink-0">{label}</span>
-      <div className="relative flex-1 min-w-0">
+      <div className="relative flex-1 min-w-[45px]">
         <input 
           type="text" 
           inputMode="decimal" 

@@ -133,7 +133,7 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
       {mode === 'direct' && (
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 w-full">
           {/* 左侧参数块：Kα + 深度连体胶囊 */}
-          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-[135px]">
+          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-[185px]">
             {/* 1. Kα 输入块 - 拓宽防溢出与圆角高亮 */}
             <div className="flex items-center justify-center px-1 py-1 rounded-lg bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[55px] shrink-0 shadow-sm focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
               <span className="text-[9px] text-slate-400 font-bold mr-0.5">Kα</span>
@@ -152,14 +152,14 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
             </div>
 
             {/* 2. 深度连体胶囊 - 升级圆角与高亮 */}
-            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[40px] divide-x divide-slate-200/50 dark:divide-gray-700/50 focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
+            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[125px] divide-x divide-slate-200/50 dark:divide-gray-700/50 focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
               <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" value={point.relativeDepth}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
                   className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
               </div>
-              <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
+              <div className="flex items-center px-1 py-1 flex-1 min-w-[65px]">
                 <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
                 <input type="text" inputMode="decimal" value={point.absoluteDepth || ''}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}

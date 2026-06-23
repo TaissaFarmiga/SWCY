@@ -473,7 +473,7 @@ export default function App() {
               </button>
 
               {/* 载入模板 — 断面模板悬浮菜单 */}
-              <div ref={templateMenuRef} className="relative">
+              <div ref={templateMenuRef} className="md:relative">
                 <button
                   onClick={() => setShowTemplateMenu(!showTemplateMenu)}
                   className="p-1.5 rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-colors"
@@ -489,7 +489,7 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.92, y: -4 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute right-0 top-full z-[60] mt-2 w-64 rounded-xl 
+                      className="absolute left-4 right-4 mx-auto md:left-auto md:right-0 top-full z-[60] mt-2 w-auto max-w-[320px] md:w-64 rounded-xl 
                         backdrop-blur-xl bg-white/90 dark:bg-gray-900/90 
                         shadow-2xl border border-gray-100 dark:border-gray-800 
                         p-3 max-h-64 overflow-y-auto custom-scrollbar"
@@ -538,7 +538,7 @@ export default function App() {
               <div className="w-px h-5 bg-slate-300/50 dark:bg-gray-600/50 mx-0.5 shrink-0" />
 
               {/* 导入备份 */}
-              <div className="relative" ref={importMenuRef}>
+              <div className="md:relative" ref={importMenuRef}>
                 <button
                   onClick={() => setShowImportMenu(!showImportMenu)}
                   className="p-1.5 rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
@@ -554,12 +554,12 @@ export default function App() {
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.92, y: -4 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute right-[-32px] md:right-0 top-full mt-1.5 w-52 rounded-2xl 
+                      className="absolute left-4 right-4 mx-auto md:left-auto md:right-0 top-full z-50 mt-1.5 w-auto max-w-[280px] md:w-52 rounded-2xl 
                         bg-white/75 dark:bg-gray-800/75 
                         backdrop-blur-xl 
                         border border-white/30 dark:border-gray-700/60 
                         shadow-2xl shadow-black/10 dark:shadow-black/40
-                        overflow-hidden z-50"
+                        overflow-hidden"
                     >
                       <button
                         onClick={() => { handleImportClick(); setShowImportMenu(false); }}

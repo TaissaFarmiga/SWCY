@@ -90,3 +90,10 @@ select {
     overscroll-behavior-y: contain;
   }
 }
+
+/* ── 统一清除原生浏览器直角对焦框（架构师强制性安全规则） ── */
+input:focus, input:focus-visible, select:focus, textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}

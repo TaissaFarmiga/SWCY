@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "build:android": "npm run build && npx cap sync android",
-    "deploy:cloud": "node scripts/uploadToCos.js"
+    "deploy:cloud": "node scripts/uploadToCos.js",
+    "deploy:patch": "npm --no-git-tag-version version patch && npm run deploy:cloud",
+    "deploy:apk": "npm --no-git-tag-version version minor && npm run deploy:cloud -- --apk"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
