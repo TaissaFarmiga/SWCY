@@ -6,10 +6,8 @@ import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Sun, Moon, Download, Upload, Activity, X, BookmarkPlus, Layers, Trash2 } from 'lucide-react';
 import { App as CapApp } from '@capacitor/app';
-import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar } from '@capacitor/status-bar';
-import pkg from '../package.json';
 import Dashboard from './components/Dashboard';
 import PeriodToggle from './components/PeriodToggle';
 import HydroTable from './components/HydroTable';
@@ -17,7 +15,7 @@ import SectionCFDChart from './components/SectionCFDChart';
 import type { SnappedPoint } from './components/SectionCFDChart';
 import { useHydroStore } from './store/hydroStore';
 import { SectionTemplate } from './store/hydroStore';
-import { runOTA, initLKG, markAppReady, destroyOTATimers } from './utils/ota';
+import { SnapshotPlugin, silentBootProbe } from './bridge/snapshotPlugin';
 
 /* ──────────── Numbers 图标 ──────────── */
 function NumbersIcon({ className }: { className?: string }) {
@@ -195,9 +193,8 @@ export default function App() {
   /* v7.0 磁吸吸附状态 — 由 SectionCFDChart 回调驱动 */
   const [snappedPoint, setSnappedPoint] = useState<SnappedPoint | null>(null);
 
-  /* ── Toast 防抖 & 手动检查锁 ── */
+  /* ── Toast 防抖 ── */
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isCheckingUpdateRef = useRef(false);
 
   /* ── 底部抽屉拖拽 resize 逻辑 ── */
   const handleSheetDrag = useCallback(
@@ -254,37 +251,16 @@ export default function App() {
     };
   }, []);
 
-  /* ── OTA 运行时：LKG 初始化 ── */
+  /* ── App 启动调试日志 ── */
   useEffect(() => {
-    initLKG(pkg.version);
+    console.log("[APP DEBUG] App started");
+    console.log("[APP DEBUG] url =", window.location.href);
+    console.log("[APP DEBUG] platform =", Capacitor.getPlatform());
   }, []);
 
-  /* ── OTA 运行时：首次挂载完成后自动检查更新 ── */
+  /* ── OTA 静默防回退探针：冷启动时后台自检沙盒版本 ── */
   useEffect(() => {
-    if (!_hasHydrated) return;
-    const timer = setTimeout(() => {
-      const MANIFEST_URLS = [
-        'https://gitee.com/farmiga/shuiwen/raw/master/version.json',
-      ];
-      runOTA(MANIFEST_URLS).catch((e) => {
-        console.error('[OTA] Auto-check failed:', e);
-      });
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [_hasHydrated]);
-
-  /* ── OTA 运行时：标记 App Ready（渲染成功后通知 watchdog） ── */
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    markAppReady();
-    if (Capacitor.isNativePlatform()) {
-      CapacitorUpdater.notifyAppReady().catch(() => {});
-    }
-  }, [_hasHydrated]);
-
-  /* ── OTA 运行时：组件卸载时清理 timer ── */
-  useEffect(() => {
-    return () => destroyOTATimers();
+    silentBootProbe();
   }, []);
 
   /* ── Android 物理返回键系统级接管 ── */
@@ -358,36 +334,64 @@ export default function App() {
     setToast({ show: false, message: '' });
   };
 
-  /* ── 手动检查更新（使用 OTA 运行时，force=true 跳过灰度） ── */
-  const handleManualUpdateCheck = useCallback(async () => {
-    if (isCheckingUpdateRef.current) return;
-    isCheckingUpdateRef.current = true;
-
-    showToast('正在连接云端检查更新...', true);
-
+  /* ── Stage 2: 测试 Snapshot Plugin ── */
+  const handleCreateTestSnapshot = useCallback(async () => {
+    showToast('正在创建测试 Snapshot...', true);
     try {
-      const MANIFEST_URLS = [
-        'https://gitee.com/farmiga/shuiwen/raw/master/version.json',
-      ];
-
-      const success = await runOTA(MANIFEST_URLS, { force: true });
-
+      const result = await SnapshotPlugin.createTestSnapshot();
       hideToast();
-
-      if (!success) {
-        showToast(`当前已是最新版本 (v${pkg.version})`, false);
-      }
-      // 若 success === true，runOTA 内部已触发 reload，不会执行到这里
+      const msg = JSON.stringify(result, null, 2);
+      alert(`[createTestSnapshot] 结果:\n\n${msg}`);
+      console.log('[SnapshotPlugin] createTestSnapshot:', result);
     } catch (error) {
       hideToast();
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      showToast(`❌ 更新失败: ${errorMessage}`, false);
-      console.error('[OTA] Manual check error:', errorMessage, error);
-    } finally {
-      isCheckingUpdateRef.current = false;
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`创建失败:\n${errorMsg}`);
+      console.error('[SnapshotPlugin] createTestSnapshot failed:', error);
     }
   }, []);
 
+  const handleApplyTestSnapshot = useCallback(async () => {
+    if (!confirm('⚠️ 切换到测试 Snapshot？\n\nApp 将被替换为 SNAPSHOT WORKS 页面。')) return;
+    showToast('正在切换 Snapshot...', true);
+    try {
+      const result = await SnapshotPlugin.applyTestSnapshot();
+      hideToast();
+      console.log('[SnapshotPlugin] applyTestSnapshot resolved:', result);
+      // reload() is called natively after resolve — page will reload
+    } catch (error) {
+      hideToast();
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`切换失败:\n${errorMsg}`);
+      console.error('[SnapshotPlugin] applyTestSnapshot failed:', error);
+    }
+  }, []);
+
+  const handleGetCurrentServerPath = useCallback(async () => {
+    try {
+      const result = await SnapshotPlugin.getCurrentServerPath();
+      const msg = `currentServerPath:\n${result.currentServerPath}`;
+      alert(msg);
+      console.log('[SnapshotPlugin] getCurrentServerPath:', result);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`getCurrentServerPath 失败:\n${errorMsg}`);
+      console.error('[SnapshotPlugin] getCurrentServerPath failed:', error);
+    }
+  }, []);
+
+  const handleReadTestSnapshot = useCallback(async () => {
+    try {
+      const result = await SnapshotPlugin.readTestSnapshot();
+      const msg = JSON.stringify(result, null, 2);
+      alert(`[readTestSnapshot] 结果:\n\n${msg}`);
+      console.log('[SnapshotPlugin] readTestSnapshot:', result);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`readTestSnapshot 失败:\n${errorMsg}`);
+      console.error('[SnapshotPlugin] readTestSnapshot failed:', error);
+    }
+  }, []);
 
   /* ── 模板：保存当前断面几何骨架 ── */
   const handleSaveTemplate = () => {
@@ -458,11 +462,42 @@ export default function App() {
           <div className="px-2 py-1.5 flex items-center justify-between gap-1.5">
             <div className="flex items-center gap-1.5">
               <div
-                onClick={handleManualUpdateCheck}
-                className="w-7 h-7 rounded-lg bg-gradient-to-br from-hydro-blue to-hydro-blue-dark flex items-center justify-center shadow-sm shadow-hydro-blue/20 cursor-pointer active:scale-90 transition-transform duration-200">
+                onClick={handleCreateTestSnapshot}
+                className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-sm shadow-amber-500/20 cursor-pointer active:scale-90 transition-transform duration-200"
+                title="创建测试Snapshot (➕)">
                 <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 18 Q8 6 12 12 Q16 18 21 6" strokeLinecap="round" />
-                  <circle cx="12" cy="6" r="2" fill="currentColor" />
+                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div
+                onClick={handleApplyTestSnapshot}
+                className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-sm shadow-emerald-500/20 cursor-pointer active:scale-90 transition-transform duration-200"
+                title="切换到测试Snapshot (⟳)">
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M2 17l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div
+                onClick={handleGetCurrentServerPath}
+                className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-sm shadow-blue-500/20 cursor-pointer active:scale-90 transition-transform duration-200"
+                title="查询当前Server路径 (📂)">
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4M12 8h.01" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div
+                onClick={handleReadTestSnapshot}
+                className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center shadow-sm shadow-purple-500/20 cursor-pointer active:scale-90 transition-transform duration-200"
+                title="读取测试Snapshot内容 (📄)">
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
                 </svg>
               </div>
               <div>

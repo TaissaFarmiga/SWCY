@@ -23,3 +23,9 @@ dist-ssr
 .env
 !dist.zip
 !dist/version.json
+!scripts/release-result.json
+scripts/.manifest-lock.json
+
+# COS keys and temp files
+scripts/cos.config.json
+.temp/
