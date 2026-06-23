@@ -343,16 +343,19 @@ export default function App() {
     console.log("[APP DEBUG] platform =", Capacitor.getPlatform());
   }, []);
 
-  /* ── 键盘滚动避让装甲：当输入框聚焦时，确保当前垂线卡片平滑滚动显影于键盘上方中央 ── */
+  /* ── 键盘滚动避让装甲：当输入框聚焦时，卡片底部边缘精确吸附于软键盘上方 24px 安全区 ── */
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
       if (target && target.tagName === 'INPUT') {
-        const card = target.closest('[id^="vertical-"]');
+        const card = target.closest('[id^="vertical-"]') as HTMLElement;
         if (card) {
+          // 动态注入 24px 原生滚动底部保护边距，让卡片底部安全浮动，绝不紧贴键盘
+          card.style.scrollMarginBottom = '24px';
           setTimeout(() => {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }, 260); // 260ms 延迟，完美躲避虚拟键盘弹出的布局滞后
+            // block: 'end' 强制将卡片下边缘（含计算结果与右水边）对齐到可视视口最底部
+            card.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          }, 260); // 260ms 延迟，避开 Android 软键盘弹出时造成的布局拉伸滞后
         }
       }
     };

@@ -29,3 +29,6 @@ scripts/.manifest-lock.json
 # COS keys and temp files
 scripts/cos.config.json
 .temp/
+
+# local env files
+.env

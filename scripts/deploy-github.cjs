@@ -142,13 +142,18 @@ if (!fs.existsSync(apkPath)) {
 }
 console.log('✅ [OTA DEPLOY] APK 物理大包生成成功！');
 
-// 6. 执行 Git Commit 与 Push Tag
+// 6. 执行 Git Commit 与 Push Tag (智能兼容本地活跃分支，拒绝死板硬编码)
 try {
   console.log('🚀 [OTA DEPLOY] 正在提交本地更改并推送 Tag...');
   execSync('git add .', { stdio: 'inherit' });
   execSync(`git commit -m "feat: 自动化升级至 v${newVersion}"`, { stdio: 'inherit' });
   execSync(`git tag v${newVersion}`, { stdio: 'inherit' });
-  execSync('git push origin main', { stdio: 'inherit' });
+  
+  // 自动雷达探测本地当前处于哪个开发分支，防止硬编码 main/master 导致推送失败
+  const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+  console.log(`🚀 [OTA DEPLOY] 检测到当前本地活跃分支为: [${currentBranch}]，正在安全推送至远程...`);
+  
+  execSync(`git push origin ${currentBranch}`, { stdio: 'inherit' });
   execSync(`git push origin v${newVersion}`, { stdio: 'inherit' });
 } catch (err) {
   console.warn('⚠️ [OTA DEPLOY] Git 推送失败（可能是没有需要提交的内容或远程冲突），继续执行 API 发布...', err.message);
