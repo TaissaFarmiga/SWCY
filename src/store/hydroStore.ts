@@ -652,10 +652,10 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
         measureMethod: v.measureMethod,
         deflectionCoefficient: v.deflectionCoefficient,
         shoreCoefficient: v.shoreCoefficient,
-        waterDepth: '',
-        iceThickness: '',
-        waterIceThickness: '',
-        iceFlowerThickness: '',
+        waterDepth: v.waterDepth || '',          // 📐 保留并记录几何水深
+        iceThickness: v.iceThickness || '',      // 📐 保留并记录冰厚
+        waterIceThickness: v.waterIceThickness || '', // 📐 保留并记录水浸
+        iceFlowerThickness: v.iceFlowerThickness || '', // 📐 保留并记录冰花
         measurePoints: (v.measurePoints || []).map((mp: any) => ({
           id: mp.id,
           relativeDepth: mp.relativeDepth,

@@ -62,7 +62,8 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 type="text" inputMode="decimal" step="0.01" min="0" max="1"
                 value={(() => {
                   const v = useHydroStore.getState().currentRun.verticals.find(v => v.id === verticalId);
-                  return v?.deflectionCoefficient || '1.0';
+                  const isIce = useHydroStore.getState().currentRun.flowPeriod === 'ice';
+                  return v?.deflectionCoefficient ?? (isIce ? '0.9' : '1.0');
                 })()}
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
@@ -140,7 +141,8 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 type="text" inputMode="decimal"
                 value={(() => {
                   const v = useHydroStore.getState().currentRun.verticals.find(v => v.id === verticalId);
-                  return v?.deflectionCoefficient || '1.0';
+                  const isIce = useHydroStore.getState().currentRun.flowPeriod === 'ice';
+                  return v?.deflectionCoefficient ?? (isIce ? '0.9' : '1.0');
                 })()}
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
