@@ -54,10 +54,10 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
       {/* ========= 公式模式：第一行 [ Kα | ▾⇊ | 🔄(靠右) ] ========= */}
       {mode === 'formula' && (
         <>
-          <div className="flex items-center gap-1.5 w-full min-w-0">
-            {/* Kα */}
-            <div className="flex items-center px-1 py-0.5 rounded bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 shrink-0">
-              <span className="text-[9px] text-slate-400 font-medium mr-0.5">Kα</span>
+          <div className="flex items-center gap-1.5 w-full">
+            {/* Kα - 自动比例填充 */}
+            <div className="flex items-center px-1.5 py-1 rounded-lg bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 flex-1 min-w-[55px] focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
+              <span className="text-[9px] text-slate-400 font-bold mr-1">Kα</span>
               <input
                 type="text" inputMode="decimal" step="0.01" min="0" max="1"
                 value={(() => {
@@ -67,12 +67,12 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
                 }}
-                className="w-8 bg-transparent text-[10px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none border border-blue-200/60 dark:border-blue-700/40 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 shadow-inner rounded"
+                className="w-full bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
               />
             </div>
 
-            {/* 深度胶囊 */}
-            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden shrink-0">
+            {/* 深度胶囊 - 自动比例填充 */}
+            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-[1.5] min-w-[110px] focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
               <div className="flex items-center px-1 py-0.5 bg-blue-50/50 dark:bg-cyan-900/20 focus-within:bg-blue-100/50 transition-colors">
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5">▾</span>
                 <input type="text" inputMode="decimal" step="0.1" value={point.relativeDepth}
@@ -96,29 +96,29 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
           </div>
 
           {/* ========= 公式模式：第二行 [ N|T 胶囊 ] → [ V 计算结果 ] ========= */}
-          <div className="flex items-center gap-1.5 w-full min-w-0">
-            {/* N|T 胶囊 — 放大版 */}
-            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden shrink-0">
-              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
-                <span className="text-[10px] text-slate-400 font-medium mr-1">N</span>
+          <div className="flex items-center gap-1.5 w-full">
+            {/* N|T 胶囊 — 比例铺满与圆角高亮 */}
+            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-[1.5] min-w-[110px] focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
+              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors flex-1">
+                <span className="text-[10px] text-slate-400 font-bold mr-1">N</span>
                 <input type="text" inputMode="numeric" value={n}
                   onChange={(e) => handleNChange(e.target.value)}
-                  className="w-10 bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
               </div>
               <div className="w-px h-4 bg-slate-200 dark:bg-gray-600 shrink-0" />
-              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors">
-                <span className="text-[10px] text-slate-400 font-medium mr-1">T</span>
+              <div className="flex items-center px-1.5 py-1 focus-within:bg-slate-50 dark:focus-within:bg-gray-800 transition-colors flex-1">
+                <span className="text-[10px] text-slate-400 font-bold mr-1">T</span>
                 <input type="text" inputMode="decimal" value={t}
                   onChange={(e) => handleTChange(e.target.value)}
-                  className="w-12 bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
+                  className="w-full bg-transparent text-[13px] font-mono font-bold text-slate-700 dark:text-slate-200 text-center outline-none" />
               </div>
             </div>
 
             {/* 小箭头 */}
             <span className="text-sm text-slate-300 dark:text-slate-600 shrink-0 font-bold">→</span>
 
-            {/* V 计算结果胶囊 — 放大拉伸 */}
-            <div className="flex items-start flex-wrap justify-center px-2 py-1 rounded bg-blue-50 dark:bg-cyan-900/30 border border-blue-100 dark:border-cyan-800 flex-1 min-w-0">
+            {/* V 计算结果胶囊 — 统一圆角样式 */}
+            <div className="flex items-center justify-center px-2 py-1 rounded-lg bg-blue-50 dark:bg-cyan-900/30 border border-blue-100 dark:border-cyan-800 flex-1 min-w-[80px]">
               <span className="font-mono text-[14px] font-black text-blue-700 dark:text-cyan-300 break-all">
                 {point.velocity ? point.velocity : '--'}
               </span>
@@ -133,9 +133,9 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 w-full">
           {/* 左侧参数块：Kα + 深度连体胶囊 */}
           <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-[135px]">
-            {/* 1. Kα 输入块 - 极简锁死宽度 */}
-            <div className="flex items-center justify-center px-1 py-1 rounded bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[50px] shrink-0 shadow-sm">
-              <span className="text-[9px] text-slate-400 font-medium mr-0.5">Kα</span>
+            {/* 1. Kα 输入块 - 拓宽防溢出与圆角高亮 */}
+            <div className="flex items-center justify-center px-1 py-1 rounded-lg bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[55px] shrink-0 shadow-sm focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
+              <span className="text-[9px] text-slate-400 font-bold mr-0.5">Kα</span>
               <input
                 type="text" inputMode="decimal"
                 value={(() => {
@@ -145,12 +145,12 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
                 onChange={(e) => {
                   useHydroStore.getState().updateVertical(verticalId, { deflectionCoefficient: e.target.value });
                 }}
-                className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
+                className="w-full min-w-0 bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 text-center outline-none"
               />
             </div>
 
-            {/* 2. 深度连体胶囊 (相对 + 绝对) - 消除间隙释放空间 */}
-            <div className="flex items-center rounded bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[40px] divide-x divide-slate-200/50 dark:divide-gray-700/50">
+            {/* 2. 深度连体胶囊 - 升级圆角与高亮 */}
+            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[40px] divide-x divide-slate-200/50 dark:divide-gray-700/50 focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
               <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" value={point.relativeDepth}
@@ -167,22 +167,22 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
             </div>
           </div>
 
-          {/* 右侧流速组合容器: V输入框 + 模式切换按钮 */}
-          <div className="flex items-center gap-1.5 whitespace-nowrap grow flex-1 min-w-[105px]">
-            {/* V 直接输入 (仅微调 pr-9 让出一个数字的宽度 10px) */}
-            <div className="relative flex-1 min-w-[140px]">
+          {/* 右侧流速组合容器 - 优化最小宽度释放 10px 空间防止按钮越界 */}
+          <div className="flex items-center gap-1.5 whitespace-nowrap grow flex-1 min-w-[95px]">
+            {/* V 直接输入 */}
+            <div className="relative flex-1 min-w-0">
               <input
                 type="text" inputMode="decimal"
                 value={point.velocity}
                 onChange={(e) => handleVelocityChange(e.target.value)}
                 placeholder=""
-                className="w-full min-w-[65px] pl-1.5 pr-9 py-1 rounded bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+                className="w-full min-w-[55px] pl-1.5 pr-9 py-1 rounded-lg bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
               />
               <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
             </div>
 
-            {/* 模式切换按钮 */}
-            <button onClick={handleModeToggle} className="p-1.5 rounded bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
+            {/* 模式切换按钮 - 升级圆角 */}
+            <button onClick={handleModeToggle} className="p-1.5 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
