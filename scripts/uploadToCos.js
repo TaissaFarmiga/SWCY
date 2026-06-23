@@ -94,6 +94,9 @@ function uploadFile(key, localPath) {
         Region,
         Key: key,
         Body: fs.createReadStream(localPath),
+        Headers: {
+          'x-cos-acl': 'public-read', // 🚀 强行将上传的对象设为公有读，防止腾讯云默认私有拦截！
+        },
         onProgress: (progress) => {
           const pct = Math.round(progress.percent * 100);
           process.stdout.write(`\r  ⏳ ${key} 上传中... ${pct}%`);
@@ -204,7 +207,7 @@ async function deploy() {
       process.exit(1);
     }
 
-    // D. 执行全自动云端上传
+    // D. 执行全自动云端上传（直接上传原始 app-release.apk 安装包）
     console.log(`   ⏳ 正在将 ${path.basename(targetApkPath)} 自动上传至腾讯云...`);
     await uploadFile('app-release.apk', targetApkPath);
   }

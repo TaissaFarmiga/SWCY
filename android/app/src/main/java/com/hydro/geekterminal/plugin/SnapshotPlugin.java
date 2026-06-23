@@ -206,12 +206,9 @@ public class SnapshotPlugin extends Plugin {
 
                 okhttp3.Request request = new okhttp3.Request.Builder()
                     .url(targetUrl)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .addHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                    .addHeader("Accept", "*/*")
                     .addHeader("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                    .addHeader("Accept-Encoding", "gzip, deflate")
-                    .addHeader("Connection", "keep-alive")
-                    .addHeader("Referer", referer)
                     .addHeader("Cache-Control", "no-cache")
                     .build();
                 okhttp3.Response response = client.newCall(request).execute();
@@ -278,13 +275,6 @@ public class SnapshotPlugin extends Plugin {
         }).start();
     }
 
-    /**
-     * APK 大版本整包下载与静默唤起安装。
-     *
-     * 前端传入 apkUrl，复用 OkHttp 防御链路下载 APK 到
-     * context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)，
-     * 然后通过 FileProvider + Intent.ACTION_VIEW 唤起系统安装器。
-     */
     @PluginMethod
     public void downloadAndInstallApk(PluginCall call) {
         String apkUrl = call.getString("apkUrl");
@@ -309,7 +299,7 @@ public class SnapshotPlugin extends Plugin {
                 File apkFile = new File(downloadDir, "update.apk");
                 if (apkFile.exists()) apkFile.delete();
 
-                // 2. 复用 OkHttp 防御链路（完整浏览器伪装 + 防盗链 Referer + NO_PROXY）
+                // 2. 复用 OkHttp 防御链路
                 java.net.URI uri = new java.net.URI(finalUrl);
                 String referer = uri.getScheme() + "://" + uri.getHost() + "/";
 
@@ -323,10 +313,9 @@ public class SnapshotPlugin extends Plugin {
 
                 okhttp3.Request request = new okhttp3.Request.Builder()
                     .url(finalUrl)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
                     .addHeader("Accept", "*/*")
                     .addHeader("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                    .addHeader("Referer", referer)
                     .addHeader("Cache-Control", "no-cache")
                     .build();
 
@@ -336,18 +325,56 @@ public class SnapshotPlugin extends Plugin {
                     return;
                 }
 
-                // 3. 流式写入 APK 文件
+                // 获取服务器期望的物理文件大小以计算真实进度
+                long expectedContentLength = response.body().contentLength();
+
+                // 3. 流式写入 APK 文件（直接管道流写入，避免大文件 OOM）
+                // 智能流式解密：根据前端参数决定是否解密前4字节的0x5A异或混淆
+                boolean isXorEncrypted = call.getBoolean("isXorEncrypted", false);
                 java.io.InputStream inputStream = response.body().byteStream();
                 FileOutputStream fos = new FileOutputStream(apkFile);
                 byte[] buffer = new byte[8192];
                 int bytesRead;
+                int offset = 0; // 全局字节偏置计数器，防止 OkHttp TCP 分包对齐失效
+                long totalBytesRead = 0;
+                int lastProgress = -1;
+
                 while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    if (isXorEncrypted) {
+                        for (int i = 0; i < bytesRead && offset < 4; i++, offset++) {
+                            buffer[i] = (byte) (buffer[i] ^ 0x5A);
+                        }
+                    }
                     fos.write(buffer, 0, bytesRead);
+                    totalBytesRead += bytesRead;
+
+                    // 计算真实百分比进度并限制桥接总线发送频率 (仅在百分比变动时发射)
+                    if (expectedContentLength > 0) {
+                        int progress = (int) ((totalBytesRead * 100) / expectedContentLength);
+                        if (progress != lastProgress) {
+                            lastProgress = progress;
+                            JSObject progressObj = new JSObject();
+                            progressObj.put("progress", progress);
+                            progressObj.put("bytesRead", totalBytesRead);
+                            progressObj.put("totalBytes", expectedContentLength);
+                            notifyListeners("downloadProgress", progressObj);
+                        }
+                    }
                 }
                 fos.close();
                 inputStream.close();
 
-                Log.e(TAG, "APK 下载完成: " + apkFile.getAbsolutePath() + " (" + apkFile.length() + " bytes)");
+                long actualFileLength = apkFile.length();
+                Log.e(TAG, "APK 下载完成: " + apkFile.getAbsolutePath() + " (" + actualFileLength + " bytes, 期望: " + expectedContentLength + ")");
+
+                // 【物理防截断校验】如果服务器给出了明确大小，但实际写入对不上，判定为半残坏包，物理销毁！
+                if (expectedContentLength > 0 && actualFileLength != expectedContentLength) {
+                    if (apkFile.exists()) {
+                        apkFile.delete();
+                    }
+                    call.reject("安全校验失败：传输中途遭遇截断，APK 文件不完整，已物理销毁。");
+                    return;
+                }
 
                 // 4. 通过 FileProvider 获取 content:// URI 并唤起安装
                 getActivity().runOnUiThread(() -> {

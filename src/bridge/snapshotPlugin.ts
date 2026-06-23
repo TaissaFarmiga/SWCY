@@ -7,6 +7,7 @@
  */
 
 import { registerPlugin } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 import type { SnapshotInfo } from '../types/update';
 
 // ─── TypeScript 接口映射 ───────────────────────────────
@@ -40,7 +41,13 @@ export interface SnapshotPluginInterface {
   getCurrentServerPath(): Promise<CurrentServerPathResult>;
   readTestSnapshot(): Promise<ReadTestSnapshotResult>;
   applySnapshot(options: { path: string; zipUrl: string }): Promise<void>;
-  downloadAndInstallApk(options: { apkUrl: string }): Promise<void>;
+  downloadAndInstallApk(options: { apkUrl: string; isXorEncrypted?: boolean }): Promise<void>;
+  
+  // 原生事件监听器声明
+  addListener(
+    eventName: 'downloadProgress',
+    listenerFunc: (progress: { progress: number; bytesRead: number; totalBytes: number }) => void
+  ): Promise<PluginListenerHandle> & PluginListenerHandle;
 }
 
 export const SnapshotPlugin = registerPlugin<SnapshotPluginInterface>('SnapshotPlugin');
@@ -57,7 +64,7 @@ interface CloudVersion {
 // ─── COS 基地址（占位符，部署前替换为实际域名）───────
 
 // ─── COS 基地址（动态读取） ───────
-const COS_BASE = 'https://shuiwen-1302320263.cos.ap-nanjing.myqcloud.com';
+const COS_BASE = 'https://YOUR_CUSTOM_DOMAIN'; // 📐 请在这里填入你绑定的已备案自定义域名，例如：https://ota.yourdomain.com
 
 // ─── 核心更新逻辑 ─────────────────────────────────────
 
@@ -86,13 +93,13 @@ export async function checkAndTriggerUpdate(): Promise<{
 
     const cloud: CloudVersion = await resp.json();
 
-    // 2. 本地版本号（从 Capacitor 原生侧获取 APK 版本作为基准）
+    // 2. 本地版本号（优先读取本地已缓存的热更版本，若无则读取原生 APK 版本作为基准）
+    const appliedZip = localStorage.getItem('applied_zip_version');
     let localVersion = '';
     try {
       const info = await SnapshotPlugin.getCurrentInfo();
-      localVersion = info.apkVersion || '';
+      localVersion = appliedZip || info.apkVersion || '';
     } catch {
-      // 非原生环境回退
       localVersion = '0.0.0';
     }
 
@@ -105,7 +112,7 @@ export async function checkAndTriggerUpdate(): Promise<{
     if (cloud.updateType === 'apk') {
       const apkUrl = `${COS_BASE}/app-release.apk`;
       console.log('[OTA] APK 大版本更新 →', apkUrl);
-      await SnapshotPlugin.downloadAndInstallApk({ apkUrl });
+      await SnapshotPlugin.downloadAndInstallApk({ apkUrl, isXorEncrypted: true });
       return { hasUpdate: true, updateType: 'apk', message: 'APK 安装中...' };
     }
 
@@ -114,6 +121,10 @@ export async function checkAndTriggerUpdate(): Promise<{
     const snapshotPath = '/data/user/0/com.hydro.geekterminal/files/snapshots/latest';
     console.log('[OTA] ZIP 热更 →', zipUrl);
     await SnapshotPlugin.applySnapshot({ path: snapshotPath, zipUrl });
+
+    // 【核心修复】热更重载前，必须将当前最新版本号写入本地缓存锁，防止死循环
+    localStorage.setItem('applied_zip_version', cloud.version);
+
     return { hasUpdate: true, updateType: 'zip', message: '热更新已触发，WebView 即将重载' };
 
   } catch (err: any) {
@@ -126,7 +137,7 @@ export async function checkAndTriggerUpdate(): Promise<{
  * 简易语义化版本比对。
  * 返回 >0 表示 a > b，<0 表示 a < b，0 表示相等。
  */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) {
@@ -144,16 +155,16 @@ export async function silentBootProbe(): Promise<void> {
   try {
     const resp = await fetch(`${COS_BASE}/version.json`, { cache: 'no-store' });
     if (!resp.ok) return;
-
+    
     const cloud = await resp.json();
-
-    let localVersion = '0.0.0';
+    
+    // 优先读取本地已缓存的热更版本
+    const appliedZip = localStorage.getItem('applied_zip_version');
+    let localVersion = '';
     try {
       const info = await SnapshotPlugin.getCurrentInfo();
-      localVersion = info.apkVersion || '0.0.0';
-    } catch {
-      return;
-    }
+      localVersion = appliedZip || info.apkVersion || '0.0.0';
+    } catch { return; }
 
     // 如果落后，且为热更包，则静默拉取
     if (compareVersions(cloud.version, localVersion) > 0 && cloud.updateType === 'zip') {
@@ -161,9 +172,11 @@ export async function silentBootProbe(): Promise<void> {
       const zipUrl = `${COS_BASE}/dist.zip`;
       const snapshotPath = '/data/user/0/com.hydro.geekterminal/files/snapshots/latest';
       await SnapshotPlugin.applySnapshot({ path: snapshotPath, zipUrl });
+
+      // 【核心修复】静默热更重载前，必须将当前最新版本号写入本地缓存锁，防止死循环
+      localStorage.setItem('applied_zip_version', cloud.version);
     }
-  } catch {
-    // 拦截一切网络异常，绝对不打扰野外业务
+  } catch (e) {
     console.warn('[OTA] 静默探针终止');
   }
 }

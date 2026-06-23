@@ -15,7 +15,7 @@ import SectionCFDChart from './components/SectionCFDChart';
 import type { SnappedPoint } from './components/SectionCFDChart';
 import { useHydroStore } from './store/hydroStore';
 import { SectionTemplate } from './store/hydroStore';
-import { SnapshotPlugin, silentBootProbe, checkAndTriggerUpdate } from './bridge/snapshotPlugin';
+import { SnapshotPlugin, silentBootProbe, checkAndTriggerUpdate, compareVersions } from './bridge/snapshotPlugin';
 
 /* ──────────── Numbers 图标 ──────────── */
 function NumbersIcon({ className }: { className?: string }) {
@@ -178,6 +178,90 @@ export default function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [toast, setToast] = useState({ show: false, message: '' });
+  const [showOtaMenu, setShowOtaMenu] = useState(false);
+  const otaMenuRef = useRef<HTMLDivElement>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
+  /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
+  const handleGitHubOTA = async () => {
+    setShowOtaMenu(false);
+    if (isCheckingOTA) return;
+    setIsCheckingOTA(true);
+    setDownloadProgress(0); // 唤醒 Safari 极简进度条
+    showToast('正在连接 GitHub 备用节点...', false); // 弱提示，2秒自动淡出
+    
+    let progressListener: any = null;
+    try {
+      // 注册真实进度条监听器
+      progressListener = await SnapshotPlugin.addListener('downloadProgress', (data) => {
+        setDownloadProgress(data.progress);
+      });
+
+      const res = await fetch('https://api.github.com/repos/TaissaFarmiga/SWCY/releases/latest', {
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'HydroTerminal-PWA-OTA'
+        }
+      });
+      if (!res.ok) throw new Error(`API 访问失败 (HTTP ${res.status})`);
+      const data = await res.json();
+      const cloudVersion = data.tag_name.replace(/^v/, '');
+      
+      const info = await SnapshotPlugin.getCurrentInfo();
+      const appliedZip = localStorage.getItem('applied_zip_version');
+      const localVersion = appliedZip || info.apkVersion || '0.0.0';
+      
+      if (compareVersions(cloudVersion, localVersion) > 0) {
+        const apkAsset = data.assets.find((a: any) => a.name.endsWith('.apk'));
+        if (apkAsset) {
+          const rawUrl = apkAsset.browser_download_url;
+          
+          // 容灾瀑布流三候选：防线 1 -> 防线 2 -> 防线 3 (官方直链)
+          const candidates = [
+            `https://gh.ddlc.top/${rawUrl}`,
+            `https://github.moeyy.xyz/${rawUrl}`,
+            rawUrl
+          ];
+
+          let success = false;
+          for (let i = 0; i < candidates.length; i++) {
+            const currentUrl = candidates[i];
+            try {
+              // 弱提示切换状态，2秒淡出，不打扰录入
+              if (i === 1) showToast('主极速线路异常，正在切换至备用高速线路...', false);
+              if (i === 2) showToast('高速线路失效，已启用官方保底线路下载...', false);
+              
+              await SnapshotPlugin.downloadAndInstallApk({ 
+                apkUrl: currentUrl,
+                isXorEncrypted: false 
+              });
+              success = true;
+              break; // 下载拉起成功，跳出循环
+            } catch (singleErr) {
+              console.warn(`节点 [${i}] 尝试失败，准备尝试下一节点`, singleErr);
+            }
+          }
+
+          if (!success) {
+            throw new Error('所有下载通道均连接超时，请检查网络后再试');
+          }
+        } else {
+          showToast('未发现安装包(APK)产物');
+        }
+      } else {
+        showToast(`当前已是最新规程版本 (${localVersion})`);
+      }
+    } catch (err: any) {
+      showToast(`更新中断: ${err?.message || err}`);
+    } finally {
+      setIsCheckingOTA(false);
+      setDownloadProgress(null); // 销毁 Safari 进度条
+      if (progressListener) {
+        progressListener.remove();
+      }
+    }
+  };
+
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [isCheckingOTA, setIsCheckingOTA] = useState(false);
@@ -286,6 +370,10 @@ export default function App() {
     let handle: { remove: () => void } | null = null;
     CapApp.addListener('backButton', () => {
       // 优先检查是否有展开的 UI 抽屉/面板
+      if (showOtaMenu) {
+        setShowOtaMenu(false);
+        return;
+      }
       if (showCFDSheet) {
         setShowCFDSheet(false);
         return;
@@ -306,7 +394,7 @@ export default function App() {
     return () => {
       handle?.remove();
     };
-  }, [showCFDSheet, showImportMenu, showTemplateMenu]);
+  }, [showCFDSheet, showImportMenu, showTemplateMenu, showOtaMenu]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -338,6 +426,19 @@ export default function App() {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showTemplateMenu]);
+
+  /* 点击外部关闭 OTA 控制台菜单 */
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (otaMenuRef.current && !otaMenuRef.current.contains(e.target as Node)) {
+        setShowOtaMenu(false);
+      }
+    }
+    if (showOtaMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showOtaMenu]);
 
   const showToast = (msg: string, persistent = false) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -422,7 +523,7 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 transition-colors duration-300"
+      className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 focus-within:pb-[50vh] transition-[padding,colors] duration-300"
       style={{
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
@@ -438,30 +539,72 @@ export default function App() {
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10">
         {/* 标题栏 — 随屏滚动 */}
-        <header className="relative bg-[#F2F2F7] dark:bg-gray-950 pt-safe">
+        <header className="relative bg-[#F2F2F7] dark:bg-gray-950 pt-safe border-b border-slate-200/60 dark:border-gray-800/60">
           <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
-            {/* 恢复原生 Logo，并注入一键 OTA 能力 */}
-            <button
-              onClick={handleDirectOTA}
-              disabled={isCheckingOTA}
-              className="flex items-center gap-1.5 p-1 -ml-1 rounded-xl hover:bg-slate-200/50 dark:hover:bg-gray-800/50 active:scale-95 transition-all outline-none shrink-0"
-              title="点击检查更新"
-            >
-              <div className="shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-hydro-blue to-hydro-blue-dark flex items-center justify-center shadow-sm shadow-hydro-blue/20">
-                {isCheckingOTA ? (
-                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M3 18 Q8 6 12 12 Q16 18 21 6" strokeLinecap="round" />
-                    <circle cx="12" cy="6" r="2" fill="currentColor" />
-                  </svg>
+            {/* 双轨 OTA 液态玻璃控制台 */}
+            <div className="relative shrink-0" ref={otaMenuRef}>
+              <button
+                onClick={() => setShowOtaMenu(!showOtaMenu)}
+                className="flex items-center gap-1.5 p-1 -ml-1 rounded-xl hover:bg-slate-200/50 dark:hover:bg-gray-800/50 active:scale-95 transition-all outline-none"
+                title="更新控制台"
+              >
+                <div className="shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-hydro-blue to-hydro-blue-dark flex items-center justify-center shadow-sm shadow-hydro-blue/20">
+                  {isCheckingOTA ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 18 Q8 6 12 12 Q16 18 21 6" strokeLinecap="round" />
+                      <circle cx="12" cy="6" r="2" fill="currentColor" />
+                    </svg>
+                  )}
+                </div>
+                <div className="text-left shrink-0 whitespace-nowrap">
+                  <h1 className="text-sm font-bold text-slate-800 dark:text-white leading-none mb-0.5">水文测验</h1>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 leading-none">GB 50179-2015</p>
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {showOtaMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.92, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.92, y: -4 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute left-0 top-full z-[120] mt-2 w-52 rounded-2xl 
+                      bg-white/45 dark:bg-gray-900/45 backdrop-blur-xl 
+                      border border-white/40 dark:border-white/10 
+                      shadow-[0_8px_32px_0_rgba(31,38,135,0.15)] 
+                      ring-1 ring-white/50 origin-top-left p-1.5 flex flex-col gap-1"
+                  >
+                    <button
+                      onClick={() => { handleDirectOTA(); setShowOtaMenu(false); }}
+                      disabled={isCheckingOTA}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold
+                        text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-sm">☁️</span>
+                      <div className="min-w-0">
+                        <div className="font-bold">腾讯云核心节点</div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500">OTA 热更 / XOR 混淆大包</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handleGitHubOTA}
+                      disabled={isCheckingOTA}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-xs font-semibold
+                        text-slate-700 dark:text-slate-200 hover:bg-white/40 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
+                    >
+                      <span className="text-sm">🐙</span>
+                      <div className="min-w-0">
+                        <div className="font-bold">GitHub 备用节点</div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500">开源仓库直连 / 原生 APK</div>
+                      </div>
+                    </button>
+                  </motion.div>
                 )}
-              </div>
-              <div className="text-left shrink-0 whitespace-nowrap">
-                <h1 className="text-sm font-bold text-slate-800 dark:text-white leading-none mb-0.5">水文测验</h1>
-                <p className="text-xs text-slate-400 dark:text-slate-500 leading-none">GB 50179-2015</p>
-              </div>
-            </button>
+              </AnimatePresence>
+            </div>
 
             {/* 操作按钮区 */}
             <div className="flex items-center gap-1 flex-wrap justify-end flex-1 min-w-[200px]">
@@ -601,6 +744,18 @@ export default function App() {
               </button>
             </div>
           </div>
+          
+          {/* 🔍 Apple Safari 风格：液态微光真实进度条（紧贴 Header 底部） */}
+          {downloadProgress !== null && (
+            <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-slate-200/20 dark:bg-gray-800/20 overflow-hidden z-[130]">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${downloadProgress}%` }}
+                transition={{ duration: 0.1, ease: 'linear' }}
+                className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 shadow-[0_0_8px_rgba(34,211,238,0.8)]"
+              />
+            </div>
+          )}
         </header>
 
         <Dashboard />
