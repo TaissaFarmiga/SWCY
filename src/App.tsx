@@ -181,7 +181,6 @@ export default function App() {
   const [showOtaMenu, setShowOtaMenu] = useState(false);
   const otaMenuRef = useRef<HTMLDivElement>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-  const [otaPadding, setOtaPadding] = useState('0px');
 
   /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
   const handleGitHubOTA = async () => {
@@ -317,7 +316,7 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. 全栖双模避让内核 (兼顾全面屏盲区兜底 & 非全面屏精确视口校准) ── */
+  /* ── 2. 极速原生同步避让内核 (0 延时，纯 DOM 注入，彻底破除 React 异步渲染导致的时序死锁) ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -333,18 +332,20 @@ export default function App() {
       return tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable;
     };
 
-    // 🎯 第二波校准：兼容非全面屏（adjustResize 生效）的精确视口回调
+    // 原生暴力注入 padding 辅助函数（绕过 React 异步渲染，100% 时序安全）
+    const injectPadding = (paddingStr: string) => {
+      const root = document.getElementById('app-root-container');
+      if (root) root.style.paddingBottom = paddingStr;
+    };
+
     const handleViewportResize = () => {
       if (!window.visualViewport) return;
-      // 如果原生视口发生压缩，精准算出键盘高度
       const kbHeight = Math.max(0, window.innerHeight - window.visualViewport.height);
       if (kbHeight > 0) {
-        // 非全面屏下，原生压缩生效，用精确的真实高度覆盖掉 focusin 时的兜底高度
-        setOtaPadding(`${kbHeight + 16}px`);
+        injectPadding(`${kbHeight + 16}px`);
       }
     };
 
-    // 🎯 第一波攻击：极速跟手兜底（无视环境，先顶起来再说）
     const handleFocusIn = (e: FocusEvent) => {
       if (focusTimeout) {
         clearTimeout(focusTimeout);
@@ -352,9 +353,9 @@ export default function App() {
       }
       const target = e.target as HTMLElement;
       if (checkEditable(target)) {
-        // 无论是否全面屏，瞬间垫底 45% 并对齐，0 延迟响应
         const safePadding = Math.min(360, window.innerHeight * 0.45);
-        setOtaPadding(`${safePadding}px`);
+        // 🎯 核心修复：原生 DOM 同步注入垫底！下一行的 rAF 能瞬间获取到真实的滚动空间，右水边 100% 会被顶飞！
+        injectPadding(`${safePadding}px`);
         alignActiveElement(target);
       }
     };
@@ -363,22 +364,20 @@ export default function App() {
       focusTimeout = setTimeout(() => {
         const activeEl = document.activeElement as HTMLElement;
         if (!checkEditable(activeEl)) {
-          setOtaPadding('0px');
+          injectPadding('0px');
         }
       }, 150);
     };
 
-    // 🎯 快速点击补偿（解决二次点击盲区死锁）
     const handleInputClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (checkEditable(target) && document.activeElement === target) {
         const safePadding = Math.min(360, window.innerHeight * 0.45);
-        setOtaPadding(`${safePadding}px`);
+        injectPadding(`${safePadding}px`);
         setTimeout(() => alignActiveElement(target), 50);
       }
     };
 
-    // 🎯 滑动强制失焦（全模态通用防窜锁）
     const handleTouchMove = (e: TouchEvent) => {
       const activeEl = document.activeElement as HTMLElement;
       if (checkEditable(activeEl) && e.target !== activeEl) {
@@ -565,11 +564,12 @@ export default function App() {
 
   return (
     <div
+      id="app-root-container"
       className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 transition-[padding,colors] duration-300"
       style={{
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
-        paddingBottom: `calc(env(safe-area-inset-bottom) + ${otaPadding})`,
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
       <Toast message={toast.message} show={toast.show} />
