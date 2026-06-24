@@ -316,32 +316,33 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. 绝对数学定位避让内核 (0 延时，纯数学计算强行提拉，彻底降服键盘遮挡) ── */
+  /* ── 2. 纯数学延迟重排避让内核 (150ms 等待期彻底释放滚动空间，0 盲区) ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const injectPadding = (paddingStr: string) => {
-      // 兼容寻找根节点
       const root = document.getElementById('app-root-container') || document.body;
       if (root) root.style.paddingBottom = paddingStr;
     };
 
     const alignActiveElement = (el: HTMLElement) => {
-      requestAnimationFrame(() => {
+      // 🎯 核心修复：必须等待 150ms！
+      // 让浏览器有充足的时间去计算刚才注入的 400px Padding，彻底释放页面的滚动高度 (scrollHeight)
+      // 如果用 rAF 会因为执行太快导致浏览器误判没有滚动空间而失效！
+      setTimeout(() => {
+        const isVerticalCard = !!el.closest('[id^="vertical-"]');
         const rect = el.getBoundingClientRect();
         
-        // 🎯 数学绝杀：摒弃浏览器的 scrollIntoView！
-        // 强行把输入框定位到屏幕高度的 30% 处（黄金视觉区）。
-        // 这样即使输入框下方有 150px 的计算卡片，也绝对不会触碰到下半部 45% 的软键盘！
-        const targetTop = window.innerHeight * 0.3;
+        // 长垂线卡片拉到屏幕 30% 处（保全底部计算面板），短水边卡片拉到 50% 处（平滑居中）
+        const targetTop = window.innerHeight * (isVerticalCard ? 0.3 : 0.5);
         const offset = rect.top - targetTop;
-
-        // 仅当输入框偏离黄金区超过 30px 时才执行平滑滚动，防止微小抖动
+        
+        // 容差过滤，避免微弱抖动
         if (Math.abs(offset) > 30) {
           const root = document.scrollingElement || document.documentElement;
           root.scrollBy({ top: offset, behavior: 'smooth' });
         }
-      });
+      }, 150);
     };
 
     const checkEditable = (el: HTMLElement | null): boolean => {
@@ -365,7 +366,6 @@ export default function App() {
       }
       const target = e.target as HTMLElement;
       if (checkEditable(target)) {
-        // 强行注入 400px 物理留白，彻底释放最底部（如右水边）的滚动死锁
         injectPadding('400px');
         alignActiveElement(target);
       }
@@ -384,11 +384,10 @@ export default function App() {
       const target = e.target as HTMLElement;
       if (checkEditable(target) && document.activeElement === target) {
         injectPadding('400px');
-        setTimeout(() => alignActiveElement(target), 50);
+        alignActiveElement(target);
       }
     };
 
-    // 🎯 核心防窜：滑动屏幕瞬间拔除焦点
     const handleTouchMove = (e: TouchEvent) => {
       const activeEl = document.activeElement as HTMLElement;
       if (checkEditable(activeEl) && e.target !== activeEl) {
