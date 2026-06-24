@@ -333,8 +333,8 @@ export default function App() {
         const isVerticalCard = !!el.closest('[id^="vertical-"]');
         const rect = el.getBoundingClientRect();
         
-        // 长垂线卡片拉到屏幕 30% 处（保全底部计算面板），短水边卡片拉到 50% 处（平滑居中）
-        const targetTop = window.innerHeight * (isVerticalCard ? 0.3 : 0.5);
+        // 长垂线卡片拉到屏幕 30% 处（保全底部计算面板），短水边卡片拉到 65% 处（恰好避开键盘，避免上窜过高）
+        const targetTop = window.innerHeight * (isVerticalCard ? 0.3 : 0.65);
         const offset = rect.top - targetTop;
         
         // 容差过滤，避免微弱抖动
