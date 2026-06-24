@@ -317,25 +317,22 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. React 状态垫底动画穿透避让内核（彻底降服二次点击与光标残留死锁） ── */
+  /* ── 2. React 状态垫底强制失焦避让内核（极简防抖，彻底消除滑动乱窜与光标残留） ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    // 通用对齐辅助函数
     const alignActiveElement = (el: HTMLElement) => {
       requestAnimationFrame(() => {
         el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
       });
     };
 
-    // 模式校验辅助函数
     const checkEditable = (el: HTMLElement | null): boolean => {
       if (!el || !el.tagName) return false;
       const tagName = el.tagName.toUpperCase();
       return tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable;
     };
 
-    // 1. 视口变化自适应监听
     const handleViewportResize = () => {
       if (!window.visualViewport) return;
 
@@ -344,14 +341,21 @@ export default function App() {
       setOtaPadding(isKeyboardUp ? `${safePadding}px` : '0px');
 
       if (isKeyboardUp) {
+        // 键盘弹起时，二次确认对齐
         const activeEl = document.activeElement as HTMLElement;
         if (checkEditable(activeEl)) {
           alignActiveElement(activeEl);
         }
+      } else {
+        // 🎯 核心神级交互：当键盘收起时（视口恢复），强行拔掉光标焦点！
+        // 彻底切断光标滞留导致的死锁，确保用户下次点击时必定触发原生的 focusin 事件！
+        const activeEl = document.activeElement as HTMLElement;
+        if (checkEditable(activeEl)) {
+          activeEl.blur();
+        }
       }
     };
 
-    // 2. 首次聚焦监听 (用于切换输入框或物理 Tab 聚焦)
     const handleFocusIn = (e: FocusEvent) => {
       if (focusTimeout) {
         clearTimeout(focusTimeout);
@@ -366,7 +370,6 @@ export default function App() {
       }
     };
 
-    // 3. 彻底失焦监听 (延迟防抖复原)
     const handleFocusOut = () => {
       focusTimeout = setTimeout(() => {
         const activeEl = document.activeElement as HTMLElement;
@@ -376,36 +379,14 @@ export default function App() {
       }, 150);
     };
 
-    // 4. 🎯 终极点击补偿雷达（刺透键盘动画黑洞）
-    // 完美解决："输入后收起键盘 -> 保持光标下滑页面 -> 再次点击唤起键盘"导致的不滚动死锁
-    const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement;
-      if (checkEditable(target)) {
-        const safePadding = Math.min(360, window.innerHeight * 0.45);
-        setOtaPadding(`${safePadding}px`);
-        
-        // 核心纠偏：必须等待 300ms（留足 Android 软键盘弹出的 250ms 完整物理动画时间）
-        // 如果没有延迟，click 触发瞬间键盘还没升起，浏览器会判定输入框处于安全区而忽略滚动指令
-        setTimeout(() => {
-          alignActiveElement(target);
-        }, 300);
-      }
-    };
-
     window.visualViewport?.addEventListener('resize', handleViewportResize);
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
-    
-    // 同时监听 mouseup 和 touchend，保证在移动端点击响应的绝对可靠性
-    document.addEventListener('mouseup', handleDocumentClick);
-    document.addEventListener('touchend', handleDocumentClick);
 
     return () => {
       window.visualViewport?.removeEventListener('resize', handleViewportResize);
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
-      document.removeEventListener('mouseup', handleDocumentClick);
-      document.removeEventListener('touchend', handleDocumentClick);
       if (focusTimeout) clearTimeout(focusTimeout);
     };
   }, []);
