@@ -182,12 +182,9 @@ export default function App() {
   const otaMenuRef = useRef<HTMLDivElement>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
-  // 🔬 终极诊断雷达专用的顶层物理 Ref 声明
-  const diagnosticsResizeCount = useRef(0);
-  const diagnosticsLastFocusInScrollY = useRef(0);
 
-  // 🔬 物理基准：锁定屏幕冷启动（无键盘）时的真实 InnerHeight
-  const baseHeight = useRef(window.innerHeight);
+  // 🎯 零抖动输入内核：冷启动物理基准高度 Ref
+  const baseHeight = useRef<number | null>(null);
 
   /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
   const handleGitHubOTA = async () => {
@@ -305,62 +302,35 @@ export default function App() {
     recalculate();
   }, [recalculate]);
 
-  /* ── 沉浸式全面屏 + 全局光标后置逻辑 ── */
+  /* ── 沉浸式全面屏 ── */
   useEffect(() => {
-    // 1. 沉浸式全面屏（测试：临时设置为 false，观察 VisualViewport 是否能成功触发 resize 信号）
+    // 1. 沉浸式全面屏：让 WebView 直接垫在系统状态栏下面，实现无死角沉浸式渲染
     if (Capacitor.isNativePlatform()) {
-      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
     }
-
-    // 2. 全局光标后置逻辑：点击输入框默认定位到最后
-    const moveCursorToEnd = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      if (target && target.tagName === 'INPUT') {
-        // 利用宏任务跳过浏览器默认的光标定位行为
-        setTimeout(() => {
-          try {
-            // 防御机制：如果用户是滑动/双击有意选中了文本，则放行，不干预光标
-            if (target.selectionStart !== target.selectionEnd) return;
-
-            const len = target.value?.length || 0;
-            if (typeof target.setSelectionRange === 'function') {
-              target.setSelectionRange(len, len);
-            }
-          } catch (err) {
-            // 忽略 type="number" 等不支持 setSelectionRange API 时的原生警告
-          }
-        }, 10);
-      }
-    };
-
-    // 监听获取焦点和点击（因为点击已聚焦的输入框也会移动光标）
-    document.addEventListener('focusin', moveCursorToEnd);
-    document.addEventListener('click', moveCursorToEnd);
-
-    return () => {
-      document.removeEventListener('focusin', moveCursorToEnd);
-      document.removeEventListener('click', moveCursorToEnd);
-    };
   }, []);
 
-  /* ── App 启动调试日志 ── */
+  /* ── 1. 物理过卷阻断：阻止 Android/iOS 软键盘激活时的二次链式拉伸与回弹 ── */
   useEffect(() => {
-    console.log("[APP DEBUG] App started");
-    console.log("[APP DEBUG] url =", window.location.href);
-    console.log("[APP DEBUG] platform =", Capacitor.getPlatform());
-  }, []);
-
-  /* ── 1. H5 视口物理拟合与双通道垫底：基于 BaseHeight 基准差值的键盘高度还原（唯一布局驱动源） ── */
-  useEffect(() => {
-    // 动态注入 overscroll-behavior 阻止 Android 原生回弹造成的二次链式抖动
     document.documentElement.style.overscrollBehavior = 'contain';
     document.body.style.overscrollBehavior = 'contain';
+    return () => {
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.overscrollBehavior = '';
+    };
+  }, []);
 
+  /* ── 2. H5 视口物理拟合：基于 BaseHeight 延迟锁基准差值的被动防守避震垫（唯一布局驱动源） ── */
+  useEffect(() => {
     const handleViewportResize = () => {
       if (!window.visualViewport) return;
+
+      // 延迟且唯一初始化未弹键盘时的物理可视基准高度，避开 statusbar overlay 瞬间造成的测量误差
+      if (baseHeight.current === null) {
+        baseHeight.current = window.visualViewport.height;
+      }
       
-      // 💡 工业级自适应键盘高度计算：用挂载时的基准高度减去当前的可见视口高度
-      // 这彻底解决了 Android 原生 adjustResize 状态下 innerHeight 同步缩水导致差值为 0 的经典死锁
+      // 动态自适应键盘高度计算：用挂载时的基准高度减去当前的可见视口高度
       const keyboardHeight = Math.max(
         0,
         baseHeight.current - window.visualViewport.height
@@ -368,163 +338,37 @@ export default function App() {
       
       const paddingValue = keyboardHeight > 0 ? `${keyboardHeight + 16}px` : '0px';
       
-      // 双通道物理注入，彻底防范 scrollingElement="HTML" 的滚动截断
+      // 🎯 仅向 HTML 滚动根（documentElement）注入垫高，彻底避免双重 Layout 计算冲突与滚动条抖动
       document.documentElement.style.paddingBottom = paddingValue;
-      document.body.style.paddingBottom = paddingValue;
-
-      // 🔬 核心调试高亮 LOG，直接看数据是否成功吐出！
-      console.error(
-        '🔬 [KEYBOARD DEBUG]:',
-        'baseHeight:', baseHeight.current,
-        'innerHeight:', window.innerHeight,
-        'viewportHeight:', window.visualViewport.height,
-        'keyboardHeight:', keyboardHeight,
-        'bodyPaddingBottom:', document.body.style.paddingBottom,
-        'htmlPaddingBottom:', document.documentElement.style.paddingBottom
-      );
     };
 
     window.visualViewport?.addEventListener('resize', handleViewportResize);
     return () => {
       window.visualViewport?.removeEventListener('resize', handleViewportResize);
-      document.documentElement.style.overscrollBehavior = '';
-      document.body.style.overscrollBehavior = '';
     };
   }, []);
 
-  /* ── 2. 帧同步单一输入框避让（requestAnimationFrame 零延时竞争） ── */
+  /* ── 3. 帧同步单一编辑元素 nearest 锚定滚动 ── */
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
-      if (target && target.tagName === 'INPUT') {
-        // 锁定聚焦前的起始滚动位置，供雷达排查使用
-        diagnosticsLastFocusInScrollY.current = window.scrollY;
-        
-        // 强制将 scrollIntoView 挂载到浏览器的下一渲染帧（rAF），
-        // 彻底消灭 setTimeout 的毫秒竞争与系统默认滚动的双重重叠抖动
-        requestAnimationFrame(() => {
-          target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-        });
+      if (target) {
+        // 类型安全提取：完美兼容 INPUT、TEXTAREA 或者是 contenteditable 输入组件
+        const isEditable = 
+          target instanceof HTMLInputElement || 
+          target instanceof HTMLTextAreaElement || 
+          target.isContentEditable;
+
+        if (isEditable) {
+          requestAnimationFrame(() => {
+            // 原生视口压缩配合 H5 被动防守避震，直接调用原生 nearest 滚动，浏览器会平滑物理对齐
+            target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+          });
+        }
       }
     };
     document.addEventListener('focusin', handleFocusIn);
     return () => document.removeEventListener('focusin', handleFocusIn);
-  }, []);
-
-  /* ── 3. 🕵️‍♂️ 零抖动输入内核 - 工业级深空诊断雷达 (Forensic Loaded Diagnostics) ── */
-  useEffect(() => {
-    // 物理 DOMRect 手术刀级序列化辅助函数 (防止部分 WebKit 序列化输出空 {})
-    const serializeRect = (r?: DOMRect | null) => {
-      if (!r) return null;
-      return {
-        top: Math.round(r.top),
-        bottom: Math.round(r.bottom),
-        left: Math.round(r.left),
-        right: Math.round(r.right),
-        width: Math.round(r.width),
-        height: Math.round(r.height)
-      };
-    };
-
-    const runDiagnostics = (eventName: string) => {
-      setTimeout(() => {
-        const activeEl = document.activeElement as HTMLElement;
-        if (!activeEl) return;
-        
-        const card = activeEl.closest('[id^="vertical-"]') as HTMLElement | null;
-        const rect = activeEl.getBoundingClientRect();
-        
-        const viewportBottom = window.visualViewport
-          ? window.visualViewport.height
-          : window.innerHeight;
-
-        // 精确计算输入框底部被遮挡的物理像素差 (Overlap Pixels)
-        const overlapPixels = Math.max(0, rect.bottom - viewportBottom);
-
-        const diagnosticsData = {
-          event: eventName,
-          userAgent: navigator.userAgent,
-          
-          // 1. 视口物理尺寸与宿主容器
-          windowInnerHeight: window.innerHeight,
-          hasVisualViewport: !!window.visualViewport,
-          viewportHeight: window.visualViewport?.height || 'N/A',
-          viewportScale: window.visualViewport?.scale || 1,
-          viewportBottom: Math.round(viewportBottom),
-          visualViewportOffsetTop: window.visualViewport?.offsetTop ?? 0,
-          
-          // 2. 页面滚动坐标与承载介质排查
-          windowScrollY: window.scrollY,
-          bodyScrollTop: document.body.scrollTop,
-          documentElementScrollTop: document.documentElement.scrollTop,
-          scrollingElement: document.scrollingElement?.tagName || 'UNKNOWN',
-          
-          // 3. 页面物理高度与垫底检查
-          bodyScrollHeight: document.body.scrollHeight,
-          bodyClientHeight: document.body.clientHeight,
-          documentElementScrollHeight: document.documentElement.scrollHeight,
-          bodyPaddingBottom: document.body.style.paddingBottom || '0px',
-          
-          // 4. 当前聚焦元素及卡片链条物理坐标信息
-          activeElementTagName: activeEl.tagName,
-          activeInputId: activeEl.id || 'none',
-          activeInputClassName: activeEl.className || 'none',
-          activeElementRect: serializeRect(rect),
-          overlapPixels: Math.round(overlapPixels),
-          
-          closestVerticalCardId: card?.id || 'none',
-          closestVerticalCardHeight: card?.offsetHeight || 0,
-          closestVerticalCardRect: serializeRect(card?.getBoundingClientRect()),
-          
-          // 5. 扫描可能存在的局部 overflow 滚动容器，提取其物理高度和当前滚动坐标
-          overflowParents: (() => {
-            let p = activeEl.parentElement;
-            const res = [];
-            while (p && p !== document.body) {
-              const style = window.getComputedStyle(p);
-              const overflowY = style.overflowY;
-              const overflowX = style.overflowX;
-              const overflow = style.overflow;
-              if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden' || overflow === 'auto' || overflow === 'scroll') {
-                res.push({
-                  tag: p.tagName,
-                  className: p.className,
-                  overflow,
-                  overflowX,
-                  overflowY,
-                  scrollTop: p.scrollTop,
-                  scrollHeight: p.scrollHeight,
-                  clientHeight: p.clientHeight
-                });
-              }
-              p = p.parentElement;
-            }
-            return res.length > 0 ? res : 'NONE';
-          })()
-        };
-        console.error('🔬 [OTA DIAGNOSTICS LOG]:\n', JSON.stringify(diagnosticsData, null, 2));
-      }, 400); // 400ms 保证软键盘弹出与默认滚动完全就位后抓取真实的物理截面快照
-    };
-
-    const handleFocusIn = (e: FocusEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && target.tagName === 'INPUT') {
-        runDiagnostics('FOCUS_IN');
-      }
-    };
-
-    const handleViewportResize = () => {
-      diagnosticsResizeCount.current++; // 信号自增
-      runDiagnostics('VIEWPORT_RESIZE');
-    };
-
-    window.visualViewport?.addEventListener('resize', handleViewportResize);
-    document.addEventListener('focusin', handleFocusIn);
-
-    return () => {
-      window.visualViewport?.removeEventListener('resize', handleViewportResize);
-      document.removeEventListener('focusin', handleFocusIn);
-    };
   }, []);
 
   /* ── OTA 静默防回退探针：冷启动时后台自检沙盒版本 ── */
