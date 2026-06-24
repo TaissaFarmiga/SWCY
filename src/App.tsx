@@ -317,89 +317,95 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. React 状态垫底自适应避让内核（完美防抖，双向视口自愈对齐，100% 消除键盘遮挡） ── */
+  /* ── 2. React 状态垫底动画穿透避让内核（彻底降服二次点击与光标残留死锁） ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    // 通用对齐辅助函数
+    const alignActiveElement = (el: HTMLElement) => {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      });
+    };
+
+    // 模式校验辅助函数
+    const checkEditable = (el: HTMLElement | null): boolean => {
+      if (!el || !el.tagName) return false;
+      const tagName = el.tagName.toUpperCase();
+      return tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable;
+    };
+
+    // 1. 视口变化自适应监听
     const handleViewportResize = () => {
       if (!window.visualViewport) return;
 
       const safePadding = Math.min(360, window.innerHeight * 0.45);
-      
-      // 判定当前键盘是否物理弹起（视口高度小于 InnerHeight 即判定弹起）
       const isKeyboardUp = window.innerHeight > window.visualViewport.height;
       setOtaPadding(isKeyboardUp ? `${safePadding}px` : '0px');
 
-      // 🎯 核心自愈：若键盘弹起或高度发生变化，且当前已有光标留存的可编辑输入框
-      // 在下一帧将其重新拉回可视区中央，彻底破除"因光标已存在、再次点击弹起键盘不触发 focusin"的物理死锁！
       if (isKeyboardUp) {
         const activeEl = document.activeElement as HTMLElement;
-        if (activeEl && activeEl.tagName) {
-          const tagName = activeEl.tagName.toUpperCase();
-          const isEditable = 
-            tagName === 'INPUT' || 
-            tagName === 'TEXTAREA' || 
-            activeEl.isContentEditable;
-
-          if (isEditable) {
-            requestAnimationFrame(() => {
-              activeEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-            });
-          }
+        if (checkEditable(activeEl)) {
+          alignActiveElement(activeEl);
         }
       }
     };
 
+    // 2. 首次聚焦监听 (用于切换输入框或物理 Tab 聚焦)
     const handleFocusIn = (e: FocusEvent) => {
-      // 强力清除可能存在的恢复定时器，防止在输入框间快速切换时发生视口忽高忽低的抖动
       if (focusTimeout) {
         clearTimeout(focusTimeout);
         focusTimeout = null;
       }
 
       const target = e.target as HTMLElement;
-      if (target && target.tagName) {
-        const tagName = target.tagName.toUpperCase();
-        const isEditable = 
-          tagName === 'INPUT' || 
-          tagName === 'TEXTAREA' || 
-          target.isContentEditable;
-
-        if (isEditable) {
-          const safePadding = Math.min(360, window.innerHeight * 0.45);
-          setOtaPadding(`${safePadding}px`);
-          
-          requestAnimationFrame(() => {
-            target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-          });
-        }
+      if (checkEditable(target)) {
+        const safePadding = Math.min(360, window.innerHeight * 0.45);
+        setOtaPadding(`${safePadding}px`);
+        alignActiveElement(target);
       }
     };
 
+    // 3. 彻底失焦监听 (延迟防抖复原)
     const handleFocusOut = () => {
-      // 只有当焦点真正彻底离开所有输入框时（150ms 延迟防抖），才无缝收起垫底高度
       focusTimeout = setTimeout(() => {
         const activeEl = document.activeElement as HTMLElement;
-        const isStillEditable = activeEl && activeEl.tagName && (
-          activeEl.tagName.toUpperCase() === 'INPUT' || 
-          activeEl.tagName.toUpperCase() === 'TEXTAREA' || 
-          activeEl.isContentEditable
-        );
-
-        if (!isStillEditable) {
+        if (!checkEditable(activeEl)) {
           setOtaPadding('0px');
         }
       }, 150);
     };
 
+    // 4. 🎯 终极点击补偿雷达（刺透键盘动画黑洞）
+    // 完美解决："输入后收起键盘 -> 保持光标下滑页面 -> 再次点击唤起键盘"导致的不滚动死锁
+    const handleDocumentClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (checkEditable(target)) {
+        const safePadding = Math.min(360, window.innerHeight * 0.45);
+        setOtaPadding(`${safePadding}px`);
+        
+        // 核心纠偏：必须等待 300ms（留足 Android 软键盘弹出的 250ms 完整物理动画时间）
+        // 如果没有延迟，click 触发瞬间键盘还没升起，浏览器会判定输入框处于安全区而忽略滚动指令
+        setTimeout(() => {
+          alignActiveElement(target);
+        }, 300);
+      }
+    };
+
     window.visualViewport?.addEventListener('resize', handleViewportResize);
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
+    
+    // 同时监听 mouseup 和 touchend，保证在移动端点击响应的绝对可靠性
+    document.addEventListener('mouseup', handleDocumentClick);
+    document.addEventListener('touchend', handleDocumentClick);
 
     return () => {
       window.visualViewport?.removeEventListener('resize', handleViewportResize);
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
+      document.removeEventListener('mouseup', handleDocumentClick);
+      document.removeEventListener('touchend', handleDocumentClick);
       if (focusTimeout) clearTimeout(focusTimeout);
     };
   }, []);
