@@ -181,10 +181,7 @@ export default function App() {
   const [showOtaMenu, setShowOtaMenu] = useState(false);
   const otaMenuRef = useRef<HTMLDivElement>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-
-
-  // 🎯 零抖动输入内核：冷启动物理基准高度 Ref
-  const baseHeight = useRef<number | null>(null);
+  const [otaPadding, setOtaPadding] = useState('0px');
 
   /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
   const handleGitHubOTA = async () => {
@@ -310,7 +307,7 @@ export default function App() {
     }
   }, []);
 
-  /* ── 1. 物理过卷阻断：阻止 Android/iOS 软键盘激活时的二次链式拉伸与回弹 ── */
+  /* ── 1. 物理过卷阻断 ── */
   useEffect(() => {
     document.documentElement.style.overscrollBehavior = 'contain';
     document.body.style.overscrollBehavior = 'contain';
@@ -320,72 +317,67 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. H5 视口物理拟合：基于 BaseHeight 延迟锁基准差值的被动防守避震垫（唯一布局驱动源） ── */
+  /* ── 2. React 状态垫底自适应避让内核（完美防抖，双向零重绘冲突） ── */
   useEffect(() => {
-    const handleViewportResize = () => {
-      if (!window.visualViewport) return;
+    let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
-      // 延迟且唯一初始化未弹键盘时的物理可视基准高度，避开 statusbar overlay 瞬间造成的测量误差
-      if (baseHeight.current === null) {
-        baseHeight.current = window.visualViewport.height;
-      }
-      
-      // 动态自适应键盘高度计算：用挂载时的基准高度减去当前的可见视口高度
-      const keyboardHeight = Math.max(
-        0,
-        baseHeight.current - window.visualViewport.height
-      );
-      
-      const paddingValue = keyboardHeight > 0 ? `${keyboardHeight + 16}px` : '0px';
-      
-      // 🎯 仅向 HTML 滚动根（documentElement）注入垫高，彻底避免双重 Layout 计算冲突与滚动条抖动
-      document.documentElement.style.paddingBottom = paddingValue;
-    };
-
-    window.visualViewport?.addEventListener('resize', handleViewportResize);
-    return () => {
-      window.visualViewport?.removeEventListener('resize', handleViewportResize);
-    };
-  }, []);
-
-  /* ── 3. 帧同步单一编辑元素对齐避让（回归安全类型校验与 center 对齐） ── */
-  useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
+      // 强力清除定时器，防止在输入框间快速切换时发生 padding 忽大忽小的视觉闪烁
+      if (focusTimeout) {
+        clearTimeout(focusTimeout);
+        focusTimeout = null;
+      }
+
       const target = e.target as HTMLElement;
       if (target && target.tagName) {
         const tagName = target.tagName.toUpperCase();
         
-        // 1. 绝对安全的原始字符串校验，规避 WebView 内部 instanceof 跨原型链失效的 bug
+        // 1. 类型安全校验：完美兼容 INPUT、TEXTAREA
         const isEditable = 
           tagName === 'INPUT' || 
           tagName === 'TEXTAREA' || 
           target.isContentEditable;
 
         if (isEditable) {
+          // 2. 动态计算弹性垫（屏幕总高度的 45%，最大不超过 360px）
+          // 在全面屏模式下，window.innerHeight 恒为 780px，这里将稳定输出约 351px 的滚动弹性垫！
+          const safePadding = Math.min(360, window.innerHeight * 0.45);
+          
+          // 3. 通过 React 状态改变 App 根 div 样式，100% 物理撑开文档滚动空间，解除最后水边底部的滚动死锁
+          setOtaPadding(`${safePadding}px`);
+          
           requestAnimationFrame(() => {
-            const el = target as HTMLElement;
-
-            const vv = window.visualViewport;
-            const viewportBottom = vv
-              ? vv.height + vv.offsetTop
-              : window.innerHeight;
-
-            const rect = el.getBoundingClientRect();
-
-            // 目标：让输入框底部永远出现在键盘/视口上方安全区
-            const offset = rect.bottom - viewportBottom + 24;
-
-            const root = document.scrollingElement;
-
-            if (root) {
-              root.scrollTop += offset;
-            }
+            // 4. 强制对齐到 center，确保输入框与计算面板 100% 被顶出键盘上方
+            target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
           });
         }
       }
     };
+
+    const handleFocusOut = () => {
+      // 5. 仅当焦点彻底离开所有输入框时（150ms 延迟防抖），才平滑收起垫底高度
+      focusTimeout = setTimeout(() => {
+        const activeEl = document.activeElement as HTMLElement;
+        const isStillEditable = activeEl && activeEl.tagName && (
+          activeEl.tagName.toUpperCase() === 'INPUT' || 
+          activeEl.tagName.toUpperCase() === 'TEXTAREA' || 
+          activeEl.isContentEditable
+        );
+
+        if (!isStillEditable) {
+          setOtaPadding('0px');
+        }
+      }, 150);
+    };
+
     document.addEventListener('focusin', handleFocusIn);
-    return () => document.removeEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+      if (focusTimeout) clearTimeout(focusTimeout);
+    };
   }, []);
 
   /* ── OTA 静默防回退探针：冷启动时后台自检沙盒版本 ── */
@@ -555,7 +547,7 @@ export default function App() {
       style={{
         paddingLeft: 'env(safe-area-inset-left)',
         paddingRight: 'env(safe-area-inset-right)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingBottom: `calc(env(safe-area-inset-bottom) + ${otaPadding})`,
       }}
     >
       <Toast message={toast.message} show={toast.show} />
