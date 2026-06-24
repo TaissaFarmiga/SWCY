@@ -182,6 +182,10 @@ export default function App() {
   const otaMenuRef = useRef<HTMLDivElement>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
+  // 🔬 终极诊断雷达专用的顶层物理 Ref 声明
+  const diagnosticsResizeCount = useRef(0);
+  const diagnosticsLastFocusInScrollY = useRef(0);
+
   /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
   const handleGitHubOTA = async () => {
     setShowOtaMenu(false);
@@ -376,6 +380,9 @@ export default function App() {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
       if (target && target.tagName === 'INPUT') {
+        // 锁定聚焦前的起始滚动位置，供雷达排查使用
+        diagnosticsLastFocusInScrollY.current = window.scrollY;
+        
         // 强制将 scrollIntoView 挂载到浏览器的下一渲染帧（rAF），
         // 彻底消灭 setTimeout 的毫秒竞争与系统默认滚动的双重重叠抖动
         requestAnimationFrame(() => {
@@ -385,6 +392,122 @@ export default function App() {
     };
     document.addEventListener('focusin', handleFocusIn);
     return () => document.removeEventListener('focusin', handleFocusIn);
+  }, []);
+
+  /* ── 3. 🕵️‍♂️ 零抖动输入内核 - 工业级深空诊断雷达 (Forensic Loaded Diagnostics) ── */
+  useEffect(() => {
+    // 物理 DOMRect 手术刀级序列化辅助函数 (防止部分 WebKit 序列化输出空 {})
+    const serializeRect = (r?: DOMRect | null) => {
+      if (!r) return null;
+      return {
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        left: Math.round(r.left),
+        right: Math.round(r.right),
+        width: Math.round(r.width),
+        height: Math.round(r.height)
+      };
+    };
+
+    const runDiagnostics = (eventName: string) => {
+      setTimeout(() => {
+        const activeEl = document.activeElement as HTMLElement;
+        if (!activeEl) return;
+        
+        const card = activeEl.closest('[id^="vertical-"]') as HTMLElement | null;
+        const rect = activeEl.getBoundingClientRect();
+        
+        const viewportBottom = window.visualViewport
+          ? window.visualViewport.height
+          : window.innerHeight;
+
+        // 精确计算输入框底部被遮挡的物理像素差 (Overlap Pixels)
+        const overlapPixels = Math.max(0, rect.bottom - viewportBottom);
+
+        const diagnosticsData = {
+          event: eventName,
+          userAgent: navigator.userAgent,
+          
+          // 1. 视口物理尺寸与宿主容器
+          windowInnerHeight: window.innerHeight,
+          hasVisualViewport: !!window.visualViewport,
+          viewportHeight: window.visualViewport?.height || 'N/A',
+          viewportScale: window.visualViewport?.scale || 1,
+          viewportBottom: Math.round(viewportBottom),
+          visualViewportOffsetTop: window.visualViewport?.offsetTop ?? 0,
+          
+          // 2. 页面滚动坐标与承载介质排查
+          windowScrollY: window.scrollY,
+          bodyScrollTop: document.body.scrollTop,
+          documentElementScrollTop: document.documentElement.scrollTop,
+          scrollingElement: document.scrollingElement?.tagName || 'UNKNOWN',
+          
+          // 3. 页面物理高度与垫底检查
+          bodyScrollHeight: document.body.scrollHeight,
+          bodyClientHeight: document.body.clientHeight,
+          documentElementScrollHeight: document.documentElement.scrollHeight,
+          bodyPaddingBottom: document.body.style.paddingBottom || '0px',
+          
+          // 4. 当前聚焦元素及卡片链条物理坐标信息
+          activeElementTagName: activeEl.tagName,
+          activeInputId: activeEl.id || 'none',
+          activeInputClassName: activeEl.className || 'none',
+          activeElementRect: serializeRect(rect),
+          overlapPixels: Math.round(overlapPixels),
+          
+          closestVerticalCardId: card?.id || 'none',
+          closestVerticalCardHeight: card?.offsetHeight || 0,
+          closestVerticalCardRect: serializeRect(card?.getBoundingClientRect()),
+          
+          // 5. 扫描可能存在的局部 overflow 滚动容器，提取其物理高度和当前滚动坐标
+          overflowParents: (() => {
+            let p = activeEl.parentElement;
+            const res = [];
+            while (p && p !== document.body) {
+              const style = window.getComputedStyle(p);
+              const overflowY = style.overflowY;
+              const overflowX = style.overflowX;
+              const overflow = style.overflow;
+              if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden' || overflow === 'auto' || overflow === 'scroll') {
+                res.push({
+                  tag: p.tagName,
+                  className: p.className,
+                  overflow,
+                  overflowX,
+                  overflowY,
+                  scrollTop: p.scrollTop,
+                  scrollHeight: p.scrollHeight,
+                  clientHeight: p.clientHeight
+                });
+              }
+              p = p.parentElement;
+            }
+            return res.length > 0 ? res : 'NONE';
+          })()
+        };
+        console.error('🔬 [OTA DIAGNOSTICS LOG]:\n', JSON.stringify(diagnosticsData, null, 2));
+      }, 400); // 400ms 保证软键盘弹出与默认滚动完全就位后抓取真实的物理截面快照
+    };
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && target.tagName === 'INPUT') {
+        runDiagnostics('FOCUS_IN');
+      }
+    };
+
+    const handleViewportResize = () => {
+      diagnosticsResizeCount.current++; // 信号自增
+      runDiagnostics('VIEWPORT_RESIZE');
+    };
+
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
+    document.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
+      document.removeEventListener('focusin', handleFocusIn);
+    };
   }, []);
 
   /* ── OTA 静默防回退探针：冷启动时后台自检沙盒版本 ── */
