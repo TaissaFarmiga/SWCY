@@ -1,9 +1,10 @@
 {
   "name": "vite-react-typescript-starter",
   "private": true,
-  "version": "1.10.22",
+  "version": "1.10.23",
   "type": "module",
   "scripts": {
+    "generate-icons": "npx @capacitor/assets generate --iconOnly --android",
     "release": "node scripts/deploy-github.cjs",
     "dev": "vite",
     "build": "vite build",

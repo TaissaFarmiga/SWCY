@@ -963,7 +963,7 @@ export default function SectionCFDChart({ onSnapChange }: SectionCFDChartProps) 
      ════════════════════════════════════════ */
   if (measureCount < MIN_VERTICALS || !channelBounds) {
     return (
-      <div className="w-full h-full min-h-[320px] flex items-center justify-center bg-black/80 rounded-xl overflow-hidden select-none">
+      <div className="relative z-0 w-full h-full min-h-[320px] flex items-center justify-center bg-black/80 rounded-xl overflow-hidden select-none">
         <canvas
           ref={(el) => {
             if (!el) return;

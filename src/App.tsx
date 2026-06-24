@@ -198,6 +198,7 @@ export default function App() {
       });
 
       const res = await fetch('https://api.github.com/repos/TaissaFarmiga/SWCY/releases/latest', {
+        cache: 'no-store',
         headers: {
           'Accept': 'application/vnd.github+json',
           'User-Agent': 'HydroTerminal-PWA-OTA'
@@ -213,7 +214,7 @@ export default function App() {
       
       if (compareVersions(cloudVersion, localVersion) > 0) {
         const apkAsset = data.assets.find((a: any) => a.name.endsWith('.apk'));
-        if (apkAsset) {
+        if (apkAsset && apkAsset.state === 'uploaded') {
           const rawUrl = apkAsset.browser_download_url;
           
           // 容灾瀑布流三候选：防线 1 -> 防线 2 -> 防线 3 (官方直链)
@@ -245,6 +246,8 @@ export default function App() {
           if (!success) {
             throw new Error('所有下载通道均连接超时，请检查网络后再试');
           }
+        } else if (apkAsset && apkAsset.state !== 'uploaded') {
+          showToast('云端安装包仍在编译上传中，请稍后重试');
         } else {
           showToast('未发现安装包(APK)产物');
         }

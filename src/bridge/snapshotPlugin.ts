@@ -85,7 +85,7 @@ export async function checkAndTriggerUpdate(): Promise<{
   try {
     // 1. 拉取云端版本声明
     const resp = await fetch(`${COS_BASE}/version.json`, {
-      cache: 'no-cache',
+      cache: 'no-store',
     });
     if (!resp.ok) {
       return { hasUpdate: false, message: `云端版本查询失败 (HTTP ${resp.status})` };

@@ -435,8 +435,33 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     get().recalculate();
   },
 
-  swapEdges: () => set(s => { const a = [...s.currentRun.verticals]; const li = a.findIndex(v => v.type === 'edge' && v.name === '左水边'), ri = a.findIndex(v => v.type === 'edge' && v.name === '右水边'); if (li >= 0 && ri >= 0) { a[li] = { ...a[li], name: '右水边' }; a[ri] = { ...a[ri], name: '左水边' } } return { currentRun: { ...s.currentRun, verticals: a } } }),
-  swapEdgeCoefficients: () => set(s => { const a = [...s.currentRun.verticals]; const li = a.findIndex(v => v.type === 'edge' && v.name === '左水边'), ri = a.findIndex(v => v.type === 'edge' && v.name === '右水边'); if (li >= 0 && ri >= 0) { const lc = a[li].shoreCoefficient, rc = a[ri].shoreCoefficient; a[li] = { ...a[li], shoreCoefficient: rc }; a[ri] = { ...a[ri], shoreCoefficient: lc } } return { currentRun: { ...s.currentRun, verticals: a } } }),
+  swapEdges: () => {
+    set(s => {
+      const a = [...s.currentRun.verticals];
+      const li = a.findIndex(v => v.type === 'edge' && v.name === '左水边');
+      const ri = a.findIndex(v => v.type === 'edge' && v.name === '右水边');
+      if (li >= 0 && ri >= 0) {
+        a[li] = { ...a[li], name: '右水边' };
+        a[ri] = { ...a[ri], name: '左水边' };
+      }
+      return { currentRun: { ...s.currentRun, verticals: a } };
+    });
+    get().recalculate();
+  },
+  swapEdgeCoefficients: () => {
+    set(s => {
+      const a = [...s.currentRun.verticals];
+      const li = a.findIndex(v => v.type === 'edge' && v.name === '左水边');
+      const ri = a.findIndex(v => v.type === 'edge' && v.name === '右水边');
+      if (li >= 0 && ri >= 0) {
+        const lc = a[li].shoreCoefficient, rc = a[ri].shoreCoefficient;
+        a[li] = { ...a[li], shoreCoefficient: rc };
+        a[ri] = { ...a[ri], shoreCoefficient: lc };
+      }
+      return { currentRun: { ...s.currentRun, verticals: a } };
+    });
+    get().recalculate();
+  },
 
   /**
    * 【重构】自动无缝镜像引擎：每次触发重算时，自动将最新状态覆盖到历史列表中

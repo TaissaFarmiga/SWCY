@@ -107,7 +107,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
 
   return (
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="rounded-lg bg-gradient-to-r from-amber-50/90 to-orange-50/70 dark:from-amber-950/80 dark:to-orange-950/70 border border-amber-200/60 dark:border-amber-800/40 overflow-hidden"
+      className="rounded-lg bg-gradient-to-r from-amber-50/90 to-orange-50/70 dark:from-amber-950/80 dark:to-orange-950/70 border border-amber-200/60 dark:border-amber-800/40"
     >
       <div className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1.5 py-2">
         <button onClick={swapEdges}
@@ -250,7 +250,7 @@ function MeasureCard({ vertical, index }: Props) {
 
   return (
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="rounded-lg bg-white/70 dark:bg-gray-900/70 border border-white/80 dark:border-gray-700/80 overflow-hidden"
+      className="rounded-lg bg-white/70 dark:bg-gray-900/70 border border-white/80 dark:border-gray-700/80"
     >
       <div className="w-full flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-1.5 py-2 border-b border-slate-100/50 dark:border-gray-700/50">
         <div className="flex items-center justify-center w-5 h-5 rounded-md bg-hydro-blue text-white text-sm font-bold flex-shrink-0">

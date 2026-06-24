@@ -21,7 +21,7 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
 
   const handleModeToggle = () => {
     const newMode: VelocityInputMode = mode === 'direct' ? 'formula' : 'direct';
-    updateMeasurePoint(verticalId, point.id, { mode: newMode, velocity: '', n: '', t: '100' });
+    updateMeasurePoint(verticalId, point.id, { mode: newMode });
   };
 
   const handleVelocityChange = (value: string) => {
