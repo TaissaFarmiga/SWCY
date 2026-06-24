@@ -348,21 +348,23 @@ export default function App() {
     };
   }, []);
 
-  /* ── 3. 帧同步单一编辑元素 nearest 锚定滚动 ── */
+  /* ── 3. 帧同步单一编辑元素对齐避让（回归安全类型校验与 center 对齐） ── */
   useEffect(() => {
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
-      if (target) {
-        // 类型安全提取：完美兼容 INPUT、TEXTAREA 或者是 contenteditable 输入组件
+      if (target && target.tagName) {
+        const tagName = target.tagName.toUpperCase();
+        
+        // 1. 绝对安全的原始字符串校验，规避 WebView 内部 instanceof 跨原型链失效的 bug
         const isEditable = 
-          target instanceof HTMLInputElement || 
-          target instanceof HTMLTextAreaElement || 
+          tagName === 'INPUT' || 
+          tagName === 'TEXTAREA' || 
           target.isContentEditable;
 
         if (isEditable) {
           requestAnimationFrame(() => {
-            // 原生视口压缩配合 H5 被动防守避震，直接调用原生 nearest 滚动，浏览器会平滑物理对齐
-            target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            // 2. 强制使用 center 对齐，确保在全面屏不压缩视口状态下，输入框与计算面板 100% 被顶出键盘上方
+            target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
           });
         }
       }
