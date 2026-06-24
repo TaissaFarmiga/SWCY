@@ -317,7 +317,7 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. 终极自适应键盘避让内核（滑动失焦 + 点击唤醒，100% 解决盲区死锁且防乱窜） ── */
+  /* ── 2. 全栖双模避让内核 (兼顾全面屏盲区兜底 & 非全面屏精确视口校准) ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -333,6 +333,18 @@ export default function App() {
       return tagName === 'INPUT' || tagName === 'TEXTAREA' || el.isContentEditable;
     };
 
+    // 🎯 第二波校准：兼容非全面屏（adjustResize 生效）的精确视口回调
+    const handleViewportResize = () => {
+      if (!window.visualViewport) return;
+      // 如果原生视口发生压缩，精准算出键盘高度
+      const kbHeight = Math.max(0, window.innerHeight - window.visualViewport.height);
+      if (kbHeight > 0) {
+        // 非全面屏下，原生压缩生效，用精确的真实高度覆盖掉 focusin 时的兜底高度
+        setOtaPadding(`${kbHeight + 16}px`);
+      }
+    };
+
+    // 🎯 第一波攻击：极速跟手兜底（无视环境，先顶起来再说）
     const handleFocusIn = (e: FocusEvent) => {
       if (focusTimeout) {
         clearTimeout(focusTimeout);
@@ -340,6 +352,7 @@ export default function App() {
       }
       const target = e.target as HTMLElement;
       if (checkEditable(target)) {
+        // 无论是否全面屏，瞬间垫底 45% 并对齐，0 延迟响应
         const safePadding = Math.min(360, window.innerHeight * 0.45);
         setOtaPadding(`${safePadding}px`);
         alignActiveElement(target);
@@ -355,34 +368,32 @@ export default function App() {
       }, 150);
     };
 
-    // 🎯 核心修复 1：纯净的 Click 补偿监听
-    // 使用纯 click 事件替代 touchend，彻底避免了"拖拽滑动页面后松手"导致的上下乱窜！
-    // 解决键盘被系统原生返回键收起后，再次点击同一输入框不避让的死锁
+    // 🎯 快速点击补偿（解决二次点击盲区死锁）
     const handleInputClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (checkEditable(target) && document.activeElement === target) {
         const safePadding = Math.min(360, window.innerHeight * 0.45);
         setOtaPadding(`${safePadding}px`);
-        // 给 Android 软键盘弹出留出 300ms 物理动画时间，随后强制对齐
-        setTimeout(() => alignActiveElement(target), 300);
+        setTimeout(() => alignActiveElement(target), 50);
       }
     };
 
-    // 🎯 核心修复 2：滑动屏幕自动失焦 (Dismiss Keyboard on Scroll)
-    // 完美复刻顶级原生 App 体验：只要用户在输入框外部滑动屏幕，立刻强行拔掉焦点！状态瞬间清零！
+    // 🎯 滑动强制失焦（全模态通用防窜锁）
     const handleTouchMove = (e: TouchEvent) => {
       const activeEl = document.activeElement as HTMLElement;
       if (checkEditable(activeEl) && e.target !== activeEl) {
-        activeEl.blur(); // 强力击杀焦点，触发 focusout 收回 Padding
+        activeEl.blur(); 
       }
     };
 
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
     document.addEventListener('click', handleInputClick);
     document.addEventListener('touchmove', handleTouchMove, { passive: true });
 
     return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
       document.removeEventListener('click', handleInputClick);
