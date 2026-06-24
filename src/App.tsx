@@ -186,6 +186,9 @@ export default function App() {
   const diagnosticsResizeCount = useRef(0);
   const diagnosticsLastFocusInScrollY = useRef(0);
 
+  // 🔬 物理基准：锁定屏幕冷启动（无键盘）时的真实 InnerHeight
+  const baseHeight = useRef(window.innerHeight);
+
   /* ── GitHub OTA 三线容灾自愈下载逻辑 ── */
   const handleGitHubOTA = async () => {
     setShowOtaMenu(false);
@@ -347,7 +350,7 @@ export default function App() {
     console.log("[APP DEBUG] platform =", Capacitor.getPlatform());
   }, []);
 
-  /* ── 1. H5 视口物理拟合与过卷阻断：基于 VisualViewport 的垫底补偿与自适应恢复（唯一布局驱动源） ── */
+  /* ── 1. H5 视口物理拟合与双通道垫底：基于 BaseHeight 基准差值的键盘高度还原（唯一布局驱动源） ── */
   useEffect(() => {
     // 动态注入 overscroll-behavior 阻止 Android 原生回弹造成的二次链式抖动
     document.documentElement.style.overscrollBehavior = 'contain';
@@ -356,15 +359,29 @@ export default function App() {
     const handleViewportResize = () => {
       if (!window.visualViewport) return;
       
-      // 工业级裁剪：防范负值、Jitter 以及部分 Android 设备的视口微弱回弹
+      // 💡 工业级自适应键盘高度计算：用挂载时的基准高度减去当前的可见视口高度
+      // 这彻底解决了 Android 原生 adjustResize 状态下 innerHeight 同步缩水导致差值为 0 的经典死锁
       const keyboardHeight = Math.max(
         0,
-        window.innerHeight - window.visualViewport.height
+        baseHeight.current - window.visualViewport.height
       );
       
-      // 动态注入真实键盘高度 + 16px 物理安全缓冲，彻底解决底部（如右水边）滚不动的死锁
-      // 当键盘收起时，keyboardHeight 自动归零，body 垫底自然恢复，无须任何 focusout 逻辑干预
-      document.body.style.paddingBottom = keyboardHeight > 0 ? `${keyboardHeight + 16}px` : '0px';
+      const paddingValue = keyboardHeight > 0 ? `${keyboardHeight + 16}px` : '0px';
+      
+      // 双通道物理注入，彻底防范 scrollingElement="HTML" 的滚动截断
+      document.documentElement.style.paddingBottom = paddingValue;
+      document.body.style.paddingBottom = paddingValue;
+
+      // 🔬 核心调试高亮 LOG，直接看数据是否成功吐出！
+      console.error(
+        '🔬 [KEYBOARD DEBUG]:',
+        'baseHeight:', baseHeight.current,
+        'innerHeight:', window.innerHeight,
+        'viewportHeight:', window.visualViewport.height,
+        'keyboardHeight:', keyboardHeight,
+        'bodyPaddingBottom:', document.body.style.paddingBottom,
+        'htmlPaddingBottom:', document.documentElement.style.paddingBottom
+      );
     };
 
     window.visualViewport?.addEventListener('resize', handleViewportResize);
