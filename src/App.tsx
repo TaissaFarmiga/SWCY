@@ -304,9 +304,9 @@ export default function App() {
 
   /* ── 沉浸式全面屏 + 全局光标后置逻辑 ── */
   useEffect(() => {
-    // 1. 沉浸式全面屏：让 WebView 直接垫在系统状态栏下面
+    // 1. 沉浸式全面屏（测试：临时设置为 false，观察 VisualViewport 是否能成功触发 resize 信号）
     if (Capacitor.isNativePlatform()) {
-      StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
     }
 
     // 2. 全局光标后置逻辑：点击输入框默认定位到最后
