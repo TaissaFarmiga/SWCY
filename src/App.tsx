@@ -317,12 +317,41 @@ export default function App() {
     };
   }, []);
 
-  /* ── 2. React 状态垫底自适应避让内核（完美防抖，双向零重绘冲突） ── */
+  /* ── 2. React 状态垫底自适应避让内核（完美防抖，双向视口自愈对齐，100% 消除键盘遮挡） ── */
   useEffect(() => {
     let focusTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    const handleViewportResize = () => {
+      if (!window.visualViewport) return;
+
+      const safePadding = Math.min(360, window.innerHeight * 0.45);
+      
+      // 判定当前键盘是否物理弹起（视口高度小于 InnerHeight 即判定弹起）
+      const isKeyboardUp = window.innerHeight > window.visualViewport.height;
+      setOtaPadding(isKeyboardUp ? `${safePadding}px` : '0px');
+
+      // 🎯 核心自愈：若键盘弹起或高度发生变化，且当前已有光标留存的可编辑输入框
+      // 在下一帧将其重新拉回可视区中央，彻底破除"因光标已存在、再次点击弹起键盘不触发 focusin"的物理死锁！
+      if (isKeyboardUp) {
+        const activeEl = document.activeElement as HTMLElement;
+        if (activeEl && activeEl.tagName) {
+          const tagName = activeEl.tagName.toUpperCase();
+          const isEditable = 
+            tagName === 'INPUT' || 
+            tagName === 'TEXTAREA' || 
+            activeEl.isContentEditable;
+
+          if (isEditable) {
+            requestAnimationFrame(() => {
+              activeEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            });
+          }
+        }
+      }
+    };
+
     const handleFocusIn = (e: FocusEvent) => {
-      // 强力清除定时器，防止在输入框间快速切换时发生 padding 忽大忽小的视觉闪烁
+      // 强力清除可能存在的恢复定时器，防止在输入框间快速切换时发生视口忽高忽低的抖动
       if (focusTimeout) {
         clearTimeout(focusTimeout);
         focusTimeout = null;
@@ -331,23 +360,16 @@ export default function App() {
       const target = e.target as HTMLElement;
       if (target && target.tagName) {
         const tagName = target.tagName.toUpperCase();
-        
-        // 1. 类型安全校验：完美兼容 INPUT、TEXTAREA
         const isEditable = 
           tagName === 'INPUT' || 
           tagName === 'TEXTAREA' || 
           target.isContentEditable;
 
         if (isEditable) {
-          // 2. 动态计算弹性垫（屏幕总高度的 45%，最大不超过 360px）
-          // 在全面屏模式下，window.innerHeight 恒为 780px，这里将稳定输出约 351px 的滚动弹性垫！
           const safePadding = Math.min(360, window.innerHeight * 0.45);
-          
-          // 3. 通过 React 状态改变 App 根 div 样式，100% 物理撑开文档滚动空间，解除最后水边底部的滚动死锁
           setOtaPadding(`${safePadding}px`);
           
           requestAnimationFrame(() => {
-            // 4. 强制对齐到 center，确保输入框与计算面板 100% 被顶出键盘上方
             target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
           });
         }
@@ -355,7 +377,7 @@ export default function App() {
     };
 
     const handleFocusOut = () => {
-      // 5. 仅当焦点彻底离开所有输入框时（150ms 延迟防抖），才平滑收起垫底高度
+      // 只有当焦点真正彻底离开所有输入框时（150ms 延迟防抖），才无缝收起垫底高度
       focusTimeout = setTimeout(() => {
         const activeEl = document.activeElement as HTMLElement;
         const isStillEditable = activeEl && activeEl.tagName && (
@@ -370,10 +392,12 @@ export default function App() {
       }, 150);
     };
 
+    window.visualViewport?.addEventListener('resize', handleViewportResize);
     document.addEventListener('focusin', handleFocusIn);
     document.addEventListener('focusout', handleFocusOut);
 
     return () => {
+      window.visualViewport?.removeEventListener('resize', handleViewportResize);
       document.removeEventListener('focusin', handleFocusIn);
       document.removeEventListener('focusout', handleFocusOut);
       if (focusTimeout) clearTimeout(focusTimeout);
