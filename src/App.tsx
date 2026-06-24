@@ -363,8 +363,23 @@ export default function App() {
 
         if (isEditable) {
           requestAnimationFrame(() => {
-            // 2. 强制使用 center 对齐，确保在全面屏不压缩视口状态下，输入框与计算面板 100% 被顶出键盘上方
-            target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+            const el = target as HTMLElement;
+
+            const vv = window.visualViewport;
+            const viewportBottom = vv
+              ? vv.height + vv.offsetTop
+              : window.innerHeight;
+
+            const rect = el.getBoundingClientRect();
+
+            // 目标：让输入框底部永远出现在键盘/视口上方安全区
+            const offset = rect.bottom - viewportBottom + 24;
+
+            const root = document.scrollingElement;
+
+            if (root) {
+              root.scrollTop += offset;
+            }
           });
         }
       }
