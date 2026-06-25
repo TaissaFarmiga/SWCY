@@ -49,6 +49,14 @@ const formatDischargeUI = (val: string | number | undefined | null): string => {
   return roundGBUI(num, dec);
 };
 
+const formatVelocityUI = (val: string | number | undefined | null): string => {
+  if (val == null || val === '') return '';
+  const num = parseFloat(String(val));
+  if (isNaN(num)) return '';
+  if (num === 0) return '0.00';
+  return num.toFixed(2);
+};
+
 interface Props { vertical: Vertical; index: number; isLast?: boolean }
 
 /** 辅助：计算倒挂状态 */
@@ -125,7 +133,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
           <span className="text-xs text-amber-600 dark:text-amber-400 flex-shrink-0 cursor-pointer">系数 η</span>
           <div className="relative w-full">
             <input type="text" inputMode="decimal" step="0.01" min="0" max="1"
-              value={vertical.shoreCoefficient || '0.70'}
+              value={vertical.shoreCoefficient !== undefined ? vertical.shoreCoefficient : '0.70'}
               onChange={(e) => updateVertical(vertical.id, { shoreCoefficient: e.target.value })}
               onClick={(e) => e.stopPropagation()}
               className="w-full px-1 py-0.5 text-sm rounded-md bg-white/60 dark:bg-gray-800/60 dark:text-amber-200 border-0 border-b border-amber-300/50 dark:border-amber-700/50 text-center font-mono text-amber-700 dark:text-amber-300 focus:border-amber-400 outline-none"
@@ -148,7 +156,8 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
             {showResults && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} style={{ willChange: 'height, opacity' }}
                 className="overflow-hidden bg-amber-50/30 dark:bg-amber-950/30 px-1.5 py-1">
-                <div className="grid grid-cols-2 divide-x divide-amber-200/50 dark:divide-amber-800/30 rounded-md bg-white/60 dark:bg-gray-800/60 border border-amber-200/80 dark:border-amber-800/50 shadow-sm overflow-hidden">
+                <div className="grid grid-cols-3 divide-x divide-amber-200/50 dark:divide-amber-800/30 rounded-md bg-white/60 dark:bg-gray-800/60 border border-amber-200/80 dark:border-amber-800/50 shadow-sm overflow-hidden">
+                  <ResultTile label="部分流速" value={formatVelocityUI(vertical.partialMeanVelocity)} unit="m/s" />
                   <ResultTile label="部分面积" value={formatAreaUI(vertical.partialArea)} unit="m²" />
                   <ResultTile label="部分流量" value={formatDischargeUI(vertical.partialDischarge)} unit="m³/s" highlight />
                 </div>

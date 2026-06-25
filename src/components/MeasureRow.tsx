@@ -18,11 +18,30 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
 
   const mode: VelocityInputMode = point.mode || 'direct';
   const n = point.n || '';
-  const t = point.t || '100';
+  const t = point.t !== undefined ? point.t : '100';
 
   const handleModeToggle = () => {
     const newMode: VelocityInputMode = mode === 'direct' ? 'formula' : 'direct';
-    updateMeasurePoint(verticalId, point.id, { mode: newMode });
+    const updates: Partial<MeasurePoint> = { mode: newMode };
+    
+    // 🚀 核心优化：从"直读流速"切换为"公式参数"时，若已有流速 V，自动反向推导计算出转数 N，防止数据断档
+    if (newMode === 'formula' && point.velocity) {
+      const v = parseFloat(point.velocity);
+      const k = meterFormula?.k ?? 0.4280;
+      const c = meterFormula?.c ?? 0.0057;
+      const currentT = point.t || '100'; // 锁定当前历时时间，默认为100秒
+      const tv = parseFloat(currentT);
+      
+      if (!isNaN(v) && k > 0 && !isNaN(tv) && tv > 0) {
+        // N = (V - c) * T / K
+        const computedN = ((v - c) * tv) / k;
+        const calculatedN = !isNaN(computedN) ? Math.max(0, Math.round(computedN)) : 0;
+        updates.n = String(calculatedN);
+        updates.t = currentT;
+      }
+    }
+    
+    updateMeasurePoint(verticalId, point.id, updates);
   };
 
   const handleVelocityChange = (value: string) => {
@@ -43,6 +62,30 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
     if (n && value) { 
       const tv = parseFloat(value); 
       if (!isNaN(tv) && tv > 0) updates.velocity = roundVelocity(calculateVelocityFromFormula(n, value, meterFormula)); 
+    }
+    updateMeasurePoint(verticalId, point.id, updates);
+  };
+
+  const handleFormulaVelocityChange = (value: string) => {
+    const updates: Partial<MeasurePoint> = { velocity: value };
+    if (!value) {
+      updates.n = '';
+      updateMeasurePoint(verticalId, point.id, updates);
+      return;
+    }
+    const v = parseFloat(value);
+    const k = meterFormula?.k ?? 0.4280;
+    const c = meterFormula?.c ?? 0.0057;
+    
+    if (!isNaN(v) && k > 0) {
+      if (t) {
+        const tv = parseFloat(t);
+        if (!isNaN(tv) && tv > 0) {
+          // N = (V - c) * T / K
+          const computedN = ((v - c) * tv) / k;
+          updates.n = !isNaN(computedN) ? Math.max(0, Math.round(computedN)).toString() : '';
+        }
+      }
     }
     updateMeasurePoint(verticalId, point.id, updates);
   };
@@ -119,12 +162,16 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             {/* 小箭头 */}
             <span className="text-sm text-slate-300 dark:text-slate-600 shrink-0 font-bold">→</span>
 
-            {/* V 计算结果胶囊 — 统一圆角样式 */}
-            <div className="flex items-center justify-center px-2 py-1 rounded-lg bg-blue-50 dark:bg-cyan-900/30 border border-blue-100 dark:border-cyan-800 flex-1 min-w-[80px]">
-              <span className="font-mono text-[14px] font-black text-blue-700 dark:text-cyan-300 break-all">
-                {point.velocity ? point.velocity : '--'}
-              </span>
-              <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap ml-1">m/s</span>
+            {/* V 反算输入框 — 深度打通双向解算 */}
+            <div className="relative flex-1 min-w-0">
+              <input
+                type="text" inputMode="decimal"
+                value={point.velocity || ''}
+                onChange={(e) => handleFormulaVelocityChange(e.target.value)}
+                placeholder="--"
+                className="w-full min-w-[65px] pl-1.5 pr-8 py-1 rounded-lg bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+              />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
             </div>
           </div>
         </>
