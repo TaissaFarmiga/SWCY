@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { RefreshCw, Calculator } from 'lucide-react';
 import { MeasurePoint, VelocityInputMode } from '../types';
@@ -11,7 +12,7 @@ interface Props {
   index: number;
 }
 
-export default function MeasureRow({ verticalId, point, index }: Props) {
+const MeasureRow = ({ verticalId, point, index }: Props) => {
   const updateMeasurePoint = useHydroStore((s) => s.updateMeasurePoint);
   const meterFormula = useHydroStore((s) => s.currentRun.meterFormula);
 
@@ -192,4 +193,8 @@ export default function MeasureRow({ verticalId, point, index }: Props) {
       )}
     </motion.div>
   );
-}
+};
+
+export default memo(MeasureRow, (prev, next) => {
+  return prev.point === next.point && prev.index === next.index;
+});

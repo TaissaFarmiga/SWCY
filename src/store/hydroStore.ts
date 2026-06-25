@@ -79,7 +79,6 @@ interface HydroState {
   updateVertical: (vid: string, u: Partial<Vertical>) => void;
   deleteVertical: (vid: string) => void;
   toggleVerticalExpand: (vid: string) => void;
-  toggleVerticalResults: (vid: string) => void;
   updateMeasurePoint: (vid: string, pid: string, u: Partial<MeasurePoint>) => void;
   changeMeasureMethod: (vid: string, m: MeasureMethod) => void;
   changePeriod: (fp: FlowPeriod) => void;
@@ -92,6 +91,10 @@ interface HydroState {
   getProcessedRun: () => Run;
   markTime: (type: 'start' | 'end') => void;
   importBackup: (backupData: any) => void;
+  /** 工作台隔离机制 */
+  isDirty: boolean;
+  commitCurrentRun: (mode: 'overwrite' | 'new') => void;
+  revertCurrentRun: () => void;
   /** 断面模板引擎 */
   saveTemplate: () => SectionTemplate;
   deleteTemplate: (id: string) => void;
@@ -139,6 +142,7 @@ const capacitorStorage = {
 export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   currentRun: createNewRun(1, 'open'), runs: [], expandedVerticalIds: new Set(), lastAddedVerticalId: null,
   _hasHydrated: false,
+  isDirty: false,
   setHasHydrated: (state) => set({ _hasHydrated: state }),
   showHistoryPanel: false,
   showMetaPanel: false,
@@ -151,23 +155,50 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
    */
   createRun: (fp) => {
     const s = get();
-    // 🚨 自动修复历史遗留的克隆ID（核心解毒剂）
+    let newRuns = [...s.runs];
+    
+    // 🚨 防呆机制：如果有未保存的修改，静默快照并建立亲子绑定关系
+    const hasMeasure = s.currentRun.verticals.some((v: any) => v.type === 'measure');
+    if (s.isDirty && hasMeasure) {
+      const snapshot = JSON.parse(JSON.stringify(s.currentRun));
+      const existIdx = newRuns.findIndex(r => r.id === snapshot.id);
+      if (existIdx >= 0) {
+        // 历史草稿防丢：静默另存为未归档副本，自动避让同名草稿
+        const baseLocation = (snapshot.location || '未知断面').replace('_未归档', '').trim();
+        const otherRuns = newRuns.filter(r => r.id !== snapshot.id);
+        let finalLocation = baseLocation + '_未归档';
+        let counter = 1;
+        while (otherRuns.some(r => r.location === finalLocation)) {
+          finalLocation = `${baseLocation}测次${counter}_未归档`;
+          counter++;
+        }
+        snapshot.parentId = s.currentRun.id;
+        snapshot.id = crypto.randomUUID();
+        snapshot.location = finalLocation;
+        newRuns.push(snapshot);
+      } else {
+        // 全新测次防丢：直接归档，同样静默避让已有重名
+        const baseLocation = (snapshot.location || '未知断面').trim();
+        const otherRuns = newRuns.filter(r => r.id !== snapshot.id);
+        let finalLocation = baseLocation;
+        let counter = 1;
+        while (otherRuns.some(r => r.location === finalLocation)) {
+          finalLocation = `${baseLocation}测次${counter}`;
+          counter++;
+        }
+        snapshot.id = crypto.randomUUID();
+        snapshot.location = finalLocation;
+        newRuns.push(snapshot);
+      }
+    }
+
+    // 🚨 自动修复历史遗留的克隆ID
     const seenIds = new Set();
-    let newRuns = s.runs.map(r => {
+    newRuns = newRuns.map(r => {
       if (seenIds.has(r.id)) return { ...r, id: crypto.randomUUID() };
       seenIds.add(r.id);
       return r;
     });
-
-    // 1. 保存当前工作区
-    const currentToSave = JSON.parse(JSON.stringify(s.currentRun));
-    const existIdx = newRuns.findIndex(r => r.id === currentToSave.id);
-    const hasMeasure = currentToSave.verticals.some((v: any) => v.type === 'measure');
-    if (existIdx >= 0) {
-      newRuns[existIdx] = currentToSave;
-    } else if (hasMeasure) {
-      newRuns.push(currentToSave);
-    }
 
     // 2. 获取绝对最大序号
     const maxNo = newRuns.reduce((max, r) => Math.max(max, parseInt(String(r.runNumber)) || 0), 0);
@@ -191,7 +222,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       meterFormula: { ...(s.currentRun.meterFormula || DEFAULT_METER_FORMULA) },
     };
 
-    set({ currentRun: newRun, runs: newRuns, expandedVerticalIds: new Set(), lastAddedVerticalId: null });
+    set({ currentRun: newRun, runs: newRuns, expandedVerticalIds: new Set(), lastAddedVerticalId: null, isDirty: false });
   },
 
   /**
@@ -216,25 +247,12 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   updateRun: (u) => { set(s => ({ currentRun: { ...s.currentRun, ...u } })); get().recalculate(); },
   
   /** 
-   * 3. 元数据更新：智能重名避让引擎 
+   * 3. 元数据更新：纯净手输原样，不干扰用户键盘打字输入
    */
   updateRunMeta: (rid, k, v) => {
     set(s => {
-      let finalV = v;
-      // 🚨 如果修改的是断面名称，触发智能重名避让（如：郑家屯重名 -> 郑家屯测次1）
-      if (k === 'location' && v.trim() !== '') {
-        const otherRuns = s.runs.filter(r => r.id !== rid);
-        let testV = v;
-        let counter = 1;
-        while (otherRuns.some(r => r.location === testV)) {
-          testV = `${v}测次${counter}`;
-          counter++;
-        }
-        finalV = testV;
-      }
-
-      if (s.currentRun.id === rid) return { currentRun: { ...s.currentRun, [k]: finalV } };
-      return { runs: s.runs.map(r => r.id === rid ? { ...r, [k]: finalV } : r) };
+      if (s.currentRun.id === rid) return { currentRun: { ...s.currentRun, [k]: v } };
+      return { runs: s.runs.map(r => r.id === rid ? { ...r, [k]: v } : r) };
     });
     get().recalculate(); 
   },
@@ -286,10 +304,19 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       })),
       meterFormula: r.meterFormula ? { ...r.meterFormula } : undefined,
     };
+    
+    // 🚀 核心剥离：载入工作区时，强行用正则洗掉 location 里的 "测次N" 和 "_未归档" 后缀
+    // 确保折叠面板输入框里 100% 永远是用户手打的最干净位置，拒接任何后缀污染
+    cloned.location = (cloned.location || '')
+      .replace(/测次\d+/g, '')
+      .replace('_未归档', '')
+      .trim();
+
     set({
       currentRun: cloned,
       expandedVerticalIds: new Set(cloned.verticals.filter(v => v.type === 'measure').map(v => v.id)),
       lastAddedVerticalId: null,
+      isDirty: false,
     });
   },
 
@@ -384,7 +411,6 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
 
   deleteVertical: (vid) => { set(s => { const t = s.currentRun.verticals.find(v => v.id === vid); if (t?.type === 'edge') return s; const arr = s.currentRun.verticals.filter(v => v.id !== vid); let mi = 0; const rn = arr.map(v => { if (v.type === 'measure') { mi++; return { ...v, verticalNumber: String(mi) } } return v }); return { currentRun: { ...s.currentRun, verticals: rn }, expandedVerticalIds: new Set([...s.expandedVerticalIds].filter(id => id !== vid)), lastAddedVerticalId: null } }); get().recalculate(); },
   toggleVerticalExpand: (vid) => set(s => { const n = new Set(s.expandedVerticalIds); n.has(vid) ? n.delete(vid) : n.add(vid); return { expandedVerticalIds: n } }),
-  toggleVerticalResults: (vid) => set(s => ({ currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, showResults: !v.showResults } : v) } })),
 
   updateMeasurePoint: (vid, pid, updates) => {
     set(s => {
@@ -464,22 +490,97 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   },
 
   /**
-   * 【重构】自动无缝镜像引擎：每次触发重算时，自动将最新状态覆盖到历史列表中
+   * 【重构】工作台机制：重新计算仅更新当前工作区，打上脏标记，绝不自动污染历史记录
    */
   recalculate: () => set(s => { 
     const processed = processRun({ ...s.currentRun });
-    const newRuns = [...s.runs];
-    const existIdx = newRuns.findIndex(r => r.id === processed.id);
+    return { currentRun: processed, isDirty: true };
+  }),
+  
+  commitCurrentRun: (mode) => set(s => {
+    const snapshot = JSON.parse(JSON.stringify(s.currentRun));
+    let newRuns = [...s.runs];
     
-    // 只有当存在有效测速数据时，才进行历史列表的同步
-    const hasData = processed.verticals.some((v: any) => v.type === 'measure');
-    if (existIdx >= 0) {
-      newRuns[existIdx] = processed;
-    } else if (hasData) {
-      newRuns.push(processed);
+    if (mode === 'overwrite') {
+      const targetId = snapshot.parentId || snapshot.id;
+      const targetIdx = newRuns.findIndex(r => r.id === targetId);
+      
+      // 🚀 核心锁死：保存修改时，必须锁死并保留该记录在 runs 历史面板中原有的名称！
+      // 绝对不能用当前工作区剥离了"测次N"的 currentRun.location 去覆盖它！
+      const originalRun = newRuns[targetIdx];
+      const finalLocation = originalRun ? originalRun.location : snapshot.location.replace('_未归档', '');
+      
+      if (targetIdx >= 0) {
+        // 用当前草稿的数据覆盖原父次，保留原历史名称与父级 ID，清除草稿父子关联
+        newRuns[targetIdx] = {
+          ...snapshot,
+          id: targetId,
+          parentId: undefined,
+          location: finalLocation
+        };
+        
+        // 如果当前是草稿，覆盖原父次后，从列表中彻底删掉这个临时草稿本身！
+        if (snapshot.parentId) {
+          newRuns = newRuns.filter(r => r.id !== snapshot.id);
+        }
+      }
+      
+      const finalRun = {
+        ...snapshot,
+        id: targetId,
+        parentId: undefined,
+        // 工作台输入框保持最干净的去后缀名称
+        location: finalLocation.replace(/测次\d+/g, '').replace('_未归档', '').trim()
+      };
+      return { currentRun: finalRun, runs: newRuns, isDirty: false };
+    } else {
+      // 另存新档：支持智能重名避让机制
+      const baseLocation = snapshot.location.replace('_未归档', '').trim() || '未知断面';
+      
+      // 【核心修正】另存新档是要在列表中并存的！绝对不能过滤掉 parentId！
+      // 我们只需要过滤掉当前"正在被删除/转正"的草稿 ID 本身
+      const otherRuns = newRuns.filter(r => r.id !== snapshot.id);
+      let finalLocation = baseLocation;
+      let counter = 1;
+      while (otherRuns.some(r => r.location === finalLocation)) {
+        finalLocation = `${baseLocation}测次${counter}`;
+        counter++;
+      }
+      
+      const finalRun = {
+        ...snapshot,
+        id: crypto.randomUUID(), // 发放全新独立 ID
+        parentId: undefined,     // 彻底自立门户，清除父子关联
+        location: finalLocation
+      };
+      
+      // 如果当前是草稿，另存转正后，从列表中删掉这个临时草稿
+      if (snapshot.parentId) {
+        newRuns = newRuns.filter(r => r.id !== snapshot.id);
+      }
+      
+      newRuns.push(finalRun);
+      return { currentRun: finalRun, runs: newRuns, isDirty: false };
+    }
+  }),
+  
+  revertCurrentRun: () => set(s => {
+    const snapshot = JSON.parse(JSON.stringify(s.currentRun));
+    let newRuns = [...s.runs];
+    
+    // 恢复原始：如果是草稿，彻底在列表中抹除它，并重定向加载原始父级
+    const targetId = snapshot.parentId || snapshot.id;
+    const origin = newRuns.find(r => r.id === targetId);
+    
+    if (!origin) return { isDirty: false };
+    
+    if (snapshot.parentId) {
+      // 物理删除这页未归档临时草稿记录
+      newRuns = newRuns.filter(r => r.id !== snapshot.id);
     }
     
-    return { currentRun: processed, runs: newRuns };
+    const cloned = JSON.parse(JSON.stringify(origin));
+    return { currentRun: cloned, runs: newRuns, isDirty: false };
   }),
 
   exportData: async () => { 

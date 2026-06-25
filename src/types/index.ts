@@ -85,6 +85,7 @@ export interface Vertical {
 
 export interface Run {
   id: string;
+  parentId?: string;           // 🧬 亲子指针：草稿分支指向原始父级测次 ID
   runNumber: string;
   timestamp: string;
   flowPeriod: FlowPeriod;

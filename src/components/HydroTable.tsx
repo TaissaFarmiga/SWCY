@@ -41,7 +41,7 @@ export default function HydroTable() {
       {/* 水位/断面折叠面板 */}
       <AnimatePresence>
         {showMetaPanel && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ willChange: 'height, opacity' }}
             className="p-1.5 rounded-lg bg-white/60 dark:bg-gray-900/60 border border-white/80 dark:border-gray-700/80">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
               {/* 🔴 新增时间设置占满整行 */}

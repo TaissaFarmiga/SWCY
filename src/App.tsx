@@ -593,8 +593,8 @@ export default function App() {
       </div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10">
-        {/* 标题栏 — 随屏滚动 */}
-        <header className="relative bg-[#F2F2F7] dark:bg-gray-950 pt-safe border-b border-slate-200/60 dark:border-gray-800/60">
+       {/* 标题栏 — 随屏滚动 */}
+        <header className="relative z-20 bg-[#F2F2F7] dark:bg-gray-950 pt-safe border-b border-slate-200/60 dark:border-gray-800/60">
           <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
             {/* 双轨 OTA 液态玻璃控制台 */}
             <div className="relative shrink-0" ref={otaMenuRef}>
@@ -824,6 +824,7 @@ export default function App() {
                 animate={{ opacity: 1, scaleY: 1 }}
                 exit={{ opacity: 0, scaleY: 0.95 }}
                 transition={{ duration: 0.15, ease: 'easeOut' }}
+                style={{ willChange: 'transform, opacity' }}
                 className="p-1.5 rounded-lg bg-white/60 dark:bg-gray-900/60 border border-white/80 dark:border-gray-700/80 max-h-64 overflow-y-auto shadow-sm">
                 <div className="flex flex-col gap-1">
                   {sortedRuns.map((run, index) => (

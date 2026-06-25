@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Plus, History, Play, Square } from 'lucide-react';
 import { useState } from 'react';
 import { useHydroStore } from '../store/hydroStore';
+import SaveHub from './SaveHub';
 
 // Liquid Glass 风格微缩数据块 (统一宽度)
 function StatPill({ label, value, unit }: { label: string; value?: string; unit: string }) {
@@ -103,7 +104,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="px-2 py-2 space-y-2 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
+    <div className="relative z-10 px-2 py-2 space-y-2 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
       {/* 第一行：核心数据 + 展开按钮 */}
       <div className="relative pr-10">
         <div className="grid grid-cols-2 gap-2">
@@ -142,47 +143,52 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* 第二行：全站唯一操作栏 [+][历史] | [▶ 开始][⏹ 结束] */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-        {/* 新建 */}
-        <GlassButton onClick={() => createRun()} highlight className="px-2.5" title="新建测次">
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-        </GlassButton>
+     {/* 第二行：全站唯一操作栏 [+][历史] | [▶ 开始][⏹ 结束] */}
+      <div className="flex items-center gap-1.5 w-full">
+        {/* 左侧可滑动区域（如果屏幕极窄） */}
+        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {/* 新建 */}
+          <GlassButton onClick={() => createRun()} highlight className="px-2.5" title="新建测次">
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+          </GlassButton>
 
-        {/* 历史记录 */}
-        <GlassButton onClick={toggleHistoryPanel} className="min-w-[50px]" title="历史记录">
-          <History className="w-3.5 h-3.5" />
-          <span className="text-[11px] font-bold font-mono">{runsLen}</span>
-        </GlassButton>
+          {/* 历史记录 */}
+          <GlassButton onClick={toggleHistoryPanel} className="min-w-[50px]" title="历史记录">
+            <History className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-bold font-mono">{runsLen}</span>
+          </GlassButton>
 
-        {/* 分隔符 */}
-        <div className="w-px h-5 bg-slate-300/50 dark:bg-gray-600/50 mx-0.5 shrink-0" />
+          {/* 分隔符 */}
+          <div className="w-px h-5 bg-slate-300/50 dark:bg-gray-600/50 mx-0.5 shrink-0" />
 
-        {/* 开始打卡 — 通透绿色 Liquid Glass */}
-        <GlassButton
-          onClick={() => markTime('start')}
-          className="bg-green-50/60 dark:bg-green-900/20 border-green-200/50 dark:border-green-800/50 hover:bg-green-100/80 dark:hover:bg-green-900/40"
-          title="记录开始时间"
-        >
-          <Play className="w-3.5 h-3.5 text-green-600 dark:text-green-400 fill-current" />
-          <span className="text-[11px] font-mono font-bold text-green-700 dark:text-green-300">
-            {formatTime(currentRun.startTime)}
-          </span>
-        </GlassButton>
+          {/* 开始打卡 */}
+          <GlassButton
+            onClick={() => markTime('start')}
+            className="bg-green-50/60 dark:bg-green-900/20 border-green-200/50 dark:border-green-800/50 hover:bg-green-100/80 dark:hover:bg-green-900/40"
+            title="记录开始时间"
+          >
+            <Play className="w-3.5 h-3.5 text-green-600 dark:text-green-400 fill-current" />
+            <span className="text-[11px] font-mono font-bold text-green-700 dark:text-green-300">
+              {formatTime(currentRun.startTime)}
+            </span>
+          </GlassButton>
 
-        {/* 结束打卡 — 警示红色 Liquid Glass */}
-        <GlassButton
-          onClick={() => markTime('end')}
-          disabled={!currentRun.startTime}
-          className="bg-red-50/60 dark:bg-red-900/20 border-red-200/50 dark:border-red-800/50 hover:bg-red-100/80 dark:hover:bg-red-900/40"
-          title="记录结束时间"
-        >
-          <Square className="w-3.5 h-3.5 text-red-500 dark:text-red-400 fill-current" />
-          <span className="text-[11px] font-mono font-bold text-red-600 dark:text-red-300">
-            {formatTime(currentRun.endTime)}
-          </span>
-        </GlassButton>
+          {/* 结束打卡 */}
+          <GlassButton
+            onClick={() => markTime('end')}
+            disabled={!currentRun.startTime}
+            className="bg-red-50/60 dark:bg-red-900/20 border-red-200/50 dark:border-red-800/50 hover:bg-red-100/80 dark:hover:bg-red-900/40"
+            title="记录结束时间"
+          >
+            <Square className="w-3.5 h-3.5 text-red-500 dark:text-red-400 fill-current" />
+            <span className="text-[11px] font-mono font-bold text-red-600 dark:text-red-300">
+              {formatTime(currentRun.endTime)}
+            </span>
+          </GlassButton>
+        </div>
 
+        {/* 右侧固定区域：SaveHub 独立于滚动容器外，绝对防止气泡被溢出裁切 */}
+        <SaveHub />
       </div>
     </div>
   );

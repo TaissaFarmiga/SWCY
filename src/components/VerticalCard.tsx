@@ -3,7 +3,7 @@
  * 紧凑3行布局 + 防误触删除 + 深色模式 + 起点距倒挂红线警告（全覆盖）
  */
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { ChevronDown, ChevronUp, Trash2, Plus, Target, Gauge, ArrowLeftRight } from 'lucide-react';
 import { Vertical, MeasureMethod, METHOD_LABELS, getAvailableMethods } from '../types';
 import MeasureRow from './MeasureRow';
@@ -98,12 +98,11 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
   const updateVertical = useHydroStore((s) => s.updateVertical);
   const swapEdges = useHydroStore((s) => s.swapEdges);
   const swapEdgeCoefficients = useHydroStore((s) => s.swapEdgeCoefficients);
-  const toggleVerticalResults = useHydroStore((s) => s.toggleVerticalResults);
   const verticals = useHydroStore((s) => s.currentRun.verticals);
 
   const isDistanceError = calcDistanceError(verticals, index);
   const isEndBank = isLast && vertical.type === 'edge';
-  const showResults = vertical.showResults || false;
+  const [showResults, setShowResults] = useState(false);
 
   return (
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -138,7 +137,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
       {/* 结束岸计算结果面板 — 仅展示部分面积和部分流量 */}
       {isEndBank && (
         <>
-          <button onClick={() => toggleVerticalResults(vertical.id)}
+          <button onClick={() => setShowResults(!showResults)}
             className="w-full flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-r from-amber-50/30 dark:from-amber-900/20 to-transparent hover:from-amber-50/50 dark:hover:from-amber-900/30 transition-colors">
             <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
               <Gauge className="w-3 h-3" /><span>结束岸结果</span>
@@ -147,7 +146,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
           </button>
           <AnimatePresence>
             {showResults && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }}
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} style={{ willChange: 'height, opacity' }}
                 className="overflow-hidden bg-amber-50/30 dark:bg-amber-950/30 px-1.5 py-1">
                 <div className="grid grid-cols-2 divide-x divide-amber-200/50 dark:divide-amber-800/30 rounded-md bg-white/60 dark:bg-gray-800/60 border border-amber-200/80 dark:border-amber-800/50 shadow-sm overflow-hidden">
                   <ResultTile label="部分面积" value={formatAreaUI(vertical.partialArea)} unit="m²" />
@@ -235,12 +234,11 @@ function MeasureCard({ vertical, index }: Props) {
   const updateVertical = useHydroStore((s) => s.updateVertical);
   const deleteVertical = useHydroStore((s) => s.deleteVertical);
   const insertVerticalAfter = useHydroStore((s) => s.insertVerticalAfter);
-  const toggleVerticalResults = useHydroStore((s) => s.toggleVerticalResults);
   const changeMeasureMethod = useHydroStore((s) => s.changeMeasureMethod);
   const verticals = useHydroStore((s) => s.currentRun.verticals);
 
   const availableMethods = getAvailableMethods(flowPeriod);
-  const showResults = vertical.showResults || false;
+  const [showResults, setShowResults] = useState(false);
   const waterDepthNum = parseFloat(vertical.waterDepth || '0');
   const isShallow = waterDepthNum > 0 && waterDepthNum < 0.2;
   const isDistanceError = calcDistanceError(verticals, index);
@@ -310,7 +308,7 @@ function MeasureCard({ vertical, index }: Props) {
       </div>
 
       {/* 计算结果 — 整行点击展开/折叠，右侧放置操作按钮 */}
-      <div onClick={() => toggleVerticalResults(vertical.id)}
+      <div onClick={() => setShowResults(!showResults)}
         className="w-full flex items-center justify-between cursor-pointer select-none py-2 px-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors">
         <div className="flex items-center gap-1">
           <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -330,7 +328,7 @@ function MeasureCard({ vertical, index }: Props) {
 
       <AnimatePresence>
         {showResults && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }}
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} style={{ willChange: 'height, opacity' }}
             className="overflow-hidden bg-blue-50/20 dark:bg-blue-950/20 px-1.5 py-1">
             <div className="grid grid-cols-4 divide-x divide-blue-100/60 dark:divide-blue-800/40 rounded-md bg-white/60 dark:bg-gray-800/60 border border-blue-100/80 dark:border-blue-800/50 shadow-sm overflow-hidden">
               <ResultTile label="垂线流速" value={vertical.correctedVelocity} unit="m/s" />
@@ -386,7 +384,11 @@ function ResultTile({ label, value, unit, highlight }: { label: string; value?: 
   );
 }
 
-export default function VerticalCard(props: Props) {
+const VerticalCard = (props: Props) => {
   if (props.vertical.type === 'edge') return <EdgeCard vertical={props.vertical} index={props.index} isLast={props.isLast} />;
   return <MeasureCard {...props} />;
-}
+};
+
+export default memo(VerticalCard, (prev, next) => {
+  return prev.vertical === next.vertical && prev.index === next.index && prev.isLast === next.isLast;
+});
