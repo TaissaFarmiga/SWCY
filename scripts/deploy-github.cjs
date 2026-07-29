@@ -13,12 +13,13 @@ function commandName(name) {
 }
 
 function run(command, args, options = {}) {
+  const requiresWindowsShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command);
   const result = spawnSync(command, args, {
     cwd: options.cwd || ROOT,
     env: options.env || process.env,
     encoding: 'utf8',
     stdio: options.capture ? 'pipe' : 'inherit',
-    shell: false,
+    shell: requiresWindowsShell,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) {
