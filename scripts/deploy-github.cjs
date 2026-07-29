@@ -194,6 +194,47 @@ async function main() {
     throw error;
   }
 
+  if (process.platform === 'win32') {
+    try {
+      const releaseName = `水文测验终端 ${tag}`;
+      const releaseNotes = `## 更新内容\n\n- 水准测量完整闭环与成果导出\n- 流量偏离率、电子气泡工具\n- 首页版本更新中心与移动端交互优化\n- GitHub 单一可信更新通道\n\nAPK SHA-256: ${digest}`;
+      const output = run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        path.join(ROOT, 'scripts/publish-github-release.ps1'),
+        '-Repository',
+        REPOSITORY,
+        '-Tag',
+        tag,
+        '-Commit',
+        commit,
+        '-ApkPath',
+        APK_PATH,
+        '-ApkSize',
+        String(size),
+        '-Digest',
+        digest,
+        '-ReleaseNameBase64',
+        Buffer.from(releaseName, 'utf8').toString('base64'),
+        '-ReleaseNotesBase64',
+        Buffer.from(releaseNotes, 'utf8').toString('base64'),
+      ], {
+        capture: true,
+        env: { ...process.env, GITHUB_TOKEN: token },
+      });
+      const published = JSON.parse(output);
+      console.log(JSON.stringify(published, null, 2));
+      return;
+    } catch (error) {
+      try { git(['push', 'origin', `:refs/tags/${tag}`], { env: gitEnv }); } catch { /* best effort */ }
+      try { git(['tag', '-d', tag]); } catch { /* best effort */ }
+      throw error;
+    }
+  }
+
   let release = null;
   try {
     release = await githubRequest(token, '/releases', {
