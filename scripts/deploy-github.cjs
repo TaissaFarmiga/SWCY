@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const https = require('node:https');
 const { spawnSync } = require('node:child_process');
 
 const REPOSITORY = 'TaissaFarmiga/SWCY';
@@ -70,9 +71,51 @@ function compareVersions(a, b) {
   return 0;
 }
 
+function httpsRequest(url, options = {}) {
+  const body = options.body === undefined
+    ? null
+    : Buffer.isBuffer(options.body)
+      ? options.body
+      : Buffer.from(String(options.body), 'utf8');
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, {
+      method: options.method || 'GET',
+      headers: {
+        ...options.headers,
+        ...(body ? { 'Content-Length': String(body.length) } : {}),
+      },
+    }, (response) => {
+      const chunks = [];
+      let totalBytes = 0;
+      response.on('data', (chunk) => {
+        totalBytes += chunk.length;
+        if (totalBytes > 4 * 1024 * 1024) {
+          request.destroy(new Error('GitHub API 响应超过 4 MB 安全上限'));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        resolve({
+          statusCode: response.statusCode || 0,
+          text: Buffer.concat(chunks).toString('utf8'),
+        });
+      });
+    });
+    request.setTimeout(options.timeoutMs || 60_000, () => {
+      request.destroy(new Error('GitHub API 请求超时'));
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
 async function githubRequest(token, endpoint, options = {}) {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
+  const method = options.method || 'GET';
+  const response = await httpsRequest(`${API_BASE}${endpoint}`, {
+    method,
+    body: options.body,
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
@@ -81,10 +124,16 @@ async function githubRequest(token, endpoint, options = {}) {
       ...options.headers,
     },
   });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    throw new Error(`GitHub API ${options.method || 'GET'} ${endpoint} 失败（HTTP ${response.status}）：${data?.message || text}`);
+  let data = null;
+  if (response.text) {
+    try {
+      data = JSON.parse(response.text);
+    } catch {
+      throw new Error(`GitHub API ${method} ${endpoint} 返回无效 JSON（HTTP ${response.statusCode}）`);
+    }
+  }
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`GitHub API ${method} ${endpoint} 失败（HTTP ${response.statusCode}）：${data?.message || response.text}`);
   }
   return data;
 }
@@ -161,20 +210,21 @@ async function main() {
       }),
     });
 
-    const uploadResponse = await fetch(`${release.upload_url.split('{')[0]}?name=update.apk`, {
+    const uploadResponse = await httpsRequest(`${release.upload_url.split('{')[0]}?name=update.apk`, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/vnd.android.package-archive',
-        'Content-Length': String(size),
         'User-Agent': 'HydroTerminal-Release',
         'X-GitHub-Api-Version': '2022-11-28',
       },
       body: fs.readFileSync(APK_PATH),
+      timeoutMs: 300_000,
     });
-    const uploadText = await uploadResponse.text();
-    if (!uploadResponse.ok) throw new Error(`APK 上传失败（HTTP ${uploadResponse.status}）：${uploadText}`);
+    if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
+      throw new Error(`APK 上传失败（HTTP ${uploadResponse.statusCode}）：${uploadResponse.text}`);
+    }
 
     const draft = await githubRequest(token, `/releases/${release.id}`);
     const draftAsset = draft.assets.find((item) => item.name === 'update.apk' && item.state === 'uploaded');
