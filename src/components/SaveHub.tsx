@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, memo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pin, RotateCcw, Save } from 'lucide-react';
 import { useHydroStore } from '../store/hydroStore';
@@ -57,8 +57,19 @@ export default function SaveHub() {
         setMenuOpen(false);
       }
     };
-    if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleAppBack = (event: Event) => {
+      if (!menuOpen) return;
+      setMenuOpen(false);
+      event.preventDefault();
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('hydro-app-back', handleAppBack);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('hydro-app-back', handleAppBack);
+    };
   }, [menuOpen]);
 
   const handleMainClick = () => {
@@ -77,7 +88,7 @@ export default function SaveHub() {
       <button
         onClick={handleMainClick}
         disabled={!isButtonActive}
-        className={`flex items-center justify-center w-[38px] h-[32px] rounded-lg transition-all duration-300 outline-none ${
+        className={`flex min-h-11 min-w-11 items-center justify-center rounded-lg transition-all duration-300 outline-none ${
           !isButtonActive
             ? 'bg-slate-200/50 dark:bg-gray-800/50 text-slate-400 dark:text-slate-500 cursor-not-allowed'
             : !isExisting && !currentRun.parentId
@@ -104,7 +115,7 @@ export default function SaveHub() {
               {/* 大头钉：保存修改 */}
               <button
                 onClick={() => { commitCurrentRun('overwrite'); setMenuOpen(false); }}
-                className="flex items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-bold text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
+                className="flex min-h-11 items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-bold text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
               >
                 <Pin className="w-4 h-4 text-red-500 rotate-45 shrink-0" />
                 <span>保存修改</span>
@@ -113,7 +124,7 @@ export default function SaveHub() {
               {/* 另存新档 */}
               <button
                 onClick={() => { commitCurrentRun('new'); setMenuOpen(false); }}
-                className="flex items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-bold text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
+                className="flex min-h-11 items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-bold text-slate-700 dark:text-slate-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
               >
                 <TargetWithArrowIcon />
                 <span>另存新档</span>
@@ -124,7 +135,7 @@ export default function SaveHub() {
               {/* 恢复原始 */}
               <button
                 onClick={() => { revertCurrentRun(); setMenuOpen(false); }}
-                className="flex items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
+                className="flex min-h-11 items-center gap-2.5 px-3 py-2.5 w-full rounded-xl text-[13px] font-medium text-slate-500 dark:text-slate-400 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
               >
                 <RotateCcw className="w-4 h-4 text-slate-400 shrink-0" />
                 <span>恢复原始</span>

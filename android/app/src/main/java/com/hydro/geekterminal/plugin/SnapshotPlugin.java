@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
 import android.util.Log;
-import android.webkit.WebView;
 
 import androidx.core.content.FileProvider;
 
@@ -14,14 +13,12 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.hydro.geekterminal.MainActivity;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.util.Enumeration;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.io.FileInputStream;
+import java.security.MessageDigest;
 
 /**
  * SnapshotPlugin — Capacitor Android Plugin for the Web Runtime Snapshot Switch System.
@@ -154,127 +151,6 @@ public class SnapshotPlugin extends Plugin {
         }
     }
 
-    /**
-     * Receive extracted snapshot path from frontend, set it to MainActivity
-     * interceptor, then trigger WebView reload.
-     */
-    @PluginMethod
-    public void applySnapshot(PluginCall call) {
-        String path = call.getString("path"); // 目标沙盒路径 /snapshots/v2.0.0
-
-        // 1. 获取前端传来的原始被污染的 URL
-        String rawUrl = call.getString("zipUrl");
-        if (rawUrl == null || rawUrl.isEmpty()) {
-            call.reject("缺少 zipUrl 参数，无法下载");
-            return;
-        }
-
-        // 2. 终极暴力清洗：无论前端在前面拼接了什么垃圾字符，
-        // 我们只截取最后一次出现 "https://" 及其后面的所有内容。
-        int httpsIndex = rawUrl.lastIndexOf("https://");
-        if (httpsIndex != -1) {
-            rawUrl = rawUrl.substring(httpsIndex);
-        }
-
-        // 去除可能存在的首尾空格与不可见字符
-        rawUrl = rawUrl.trim();
-
-        // 3. 声明不可变的 final 变量，专门喂给异步线程
-        final String targetUrl = rawUrl;
-
-        Log.e(TAG, "接收到清洗后的动态下载地址: " + targetUrl);
-
-        // 启动异步线程下载，防止阻塞 UI
-        new Thread(() -> {
-            try {
-                // 1. 创建目标文件夹
-                File destFolder = new File(path);
-                if (!destFolder.exists()) destFolder.mkdirs();
-
-                // 2. OkHttp 下载文件（完整浏览器伪装 + 防盗链 Referer）
-                // 腾讯云 COS 要求 Referer 头，否则 CDN/WAF 返回 502
-                java.net.URI uri = new java.net.URI(targetUrl);
-                String referer = uri.getScheme() + "://" + uri.getHost() + "/";
-
-                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-                    .followRedirects(true)
-                    .followSslRedirects(true)
-                    .proxy(java.net.Proxy.NO_PROXY) // 🚀 核心杀手锏：强制 App 走物理直连，无视 Knox 等任何系统级 VPN 和代理！
-                    .build();
-
-                okhttp3.Request request = new okhttp3.Request.Builder()
-                    .url(targetUrl)
-                    .addHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-                    .addHeader("Accept", "*/*")
-                    .addHeader("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
-                    .addHeader("Cache-Control", "no-cache")
-                    .build();
-                okhttp3.Response response = client.newCall(request).execute();
-
-                if (!response.isSuccessful()) {
-                    call.reject("下载 ZIP 失败: " + response.code());
-                    return;
-                }
-
-                // 3. 流式写入临时 zip 文件（避免大文件 OOM）
-                File zipFile = new File(getContext().getCacheDir(), "update.zip");
-                java.io.InputStream inputStream = response.body().byteStream();
-                FileOutputStream fos = new FileOutputStream(zipFile);
-                byte[] downloadBuffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = inputStream.read(downloadBuffer)) != -1) {
-                    fos.write(downloadBuffer, 0, bytesRead);
-                }
-                fos.close();
-                inputStream.close();
-                Log.e(TAG, "ZIP 下载完成，准备原生解压...");
-
-                // 4. 原生 Java 解压 Zip 到目标沙盒路径
-                ZipFile zFile = new ZipFile(zipFile);
-                Enumeration<? extends ZipEntry> entries = zFile.entries();
-                while (entries.hasMoreElements()) {
-                    ZipEntry entry = entries.nextElement();
-                    File entryFile = new File(destFolder, entry.getName());
-                    if (entry.isDirectory()) {
-                        entryFile.mkdirs();
-                    } else {
-                        entryFile.getParentFile().mkdirs();
-                        InputStream is = zFile.getInputStream(entry);
-                        FileOutputStream out = new FileOutputStream(entryFile);
-                        byte[] buffer = new byte[4096];
-                        int len;
-                        while ((len = is.read(buffer)) > 0) {
-                            out.write(buffer, 0, len);
-                        }
-                        out.close();
-                        is.close();
-                    }
-                }
-                zFile.close();
-                Log.e(TAG, "原生解压完成！物理路径: " + destFolder.getAbsolutePath());
-
-                // 5. 激活拦截器并重载 WebView
-                MainActivity.snapshotBasePath = path;
-                bridge.setServerBasePath(path);
-
-                getActivity().runOnUiThread(() -> {
-                    WebView webView = bridge.getWebView();
-                    webView.clearCache(true);
-                    webView.loadUrl("https://localhost/");
-                    Log.e(TAG, "WebView 刷新成功，新版本已物理接管！");
-                });
-
-                call.resolve();
-
-            } catch (Exception e) {
-                Log.e(TAG, "真实下载解压流程崩溃", e);
-                call.reject(e.getMessage());
-            }
-        }).start();
-    }
-
     @PluginMethod
     public void downloadAndInstallApk(PluginCall call) {
         String apkUrl = call.getString("apkUrl");
@@ -283,7 +159,33 @@ public class SnapshotPlugin extends Plugin {
             return;
         }
 
+        String expectedSha256 = call.getString("expectedSha256");
+        if (expectedSha256 == null || !expectedSha256.matches("(?i)^[a-f0-9]{64}$")) {
+            call.reject("缺少有效的 APK SHA-256 校验值");
+            return;
+        }
+
         final String finalUrl = apkUrl.trim();
+        final String finalExpectedSha256 = expectedSha256.toLowerCase(java.util.Locale.ROOT);
+
+        try {
+            java.net.URI uri = new java.net.URI(finalUrl);
+            String path = uri.getPath();
+            boolean trustedRelease = path != null
+                && path.matches("^/TaissaFarmiga/SWCY/releases/download/v[0-9]+\\.[0-9]+\\.[0-9]+/update\\.apk$");
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                || !"github.com".equalsIgnoreCase(uri.getHost())
+                || uri.getUserInfo() != null
+                || uri.getRawQuery() != null
+                || uri.getRawFragment() != null
+                || !trustedRelease) {
+                call.reject("仅允许从官方 GitHub HTTPS Release 下载 update.apk");
+                return;
+            }
+        } catch (Exception e) {
+            call.reject("APK 下载地址无效");
+            return;
+        }
 
         new Thread(() -> {
             try {
@@ -299,10 +201,7 @@ public class SnapshotPlugin extends Plugin {
                 File apkFile = new File(downloadDir, "update.apk");
                 if (apkFile.exists()) apkFile.delete();
 
-                // 2. 复用 OkHttp 防御链路
-                java.net.URI uri = new java.net.URI(finalUrl);
-                String referer = uri.getScheme() + "://" + uri.getHost() + "/";
-
+                // 2. GitHub Release 官方 HTTPS 下载
                 okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
                     .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
@@ -328,23 +227,15 @@ public class SnapshotPlugin extends Plugin {
                 // 获取服务器期望的物理文件大小以计算真实进度
                 long expectedContentLength = response.body().contentLength();
 
-                // 3. 流式写入 APK 文件（直接管道流写入，避免大文件 OOM）
-                // 智能流式解密：根据前端参数决定是否解密前4字节的0x5A异或混淆
-                boolean isXorEncrypted = call.getBoolean("isXorEncrypted", false);
+                // 3. 流式写入 APK 文件，避免大文件 OOM
                 java.io.InputStream inputStream = response.body().byteStream();
                 FileOutputStream fos = new FileOutputStream(apkFile);
                 byte[] buffer = new byte[8192];
                 int bytesRead;
-                int offset = 0; // 全局字节偏置计数器，防止 OkHttp TCP 分包对齐失效
                 long totalBytesRead = 0;
                 int lastProgress = -1;
 
                 while ((bytesRead = inputStream.read(buffer)) != -1) {
-                    if (isXorEncrypted) {
-                        for (int i = 0; i < bytesRead && offset < 4; i++, offset++) {
-                            buffer[i] = (byte) (buffer[i] ^ 0x5A);
-                        }
-                    }
                     fos.write(buffer, 0, bytesRead);
                     totalBytesRead += bytesRead;
 
@@ -376,6 +267,14 @@ public class SnapshotPlugin extends Plugin {
                     return;
                 }
 
+                String actualSha256 = calculateSha256(apkFile);
+                if (!finalExpectedSha256.equals(actualSha256)) {
+                    if (apkFile.exists()) apkFile.delete();
+                    call.reject("安全校验失败：APK SHA-256 不匹配，文件已删除。");
+                    return;
+                }
+                Log.i(TAG, "APK SHA-256 校验通过: " + actualSha256);
+
                 // 4. 通过 FileProvider 获取 content:// URI 并唤起安装
                 getActivity().runOnUiThread(() -> {
                     try {
@@ -405,6 +304,22 @@ public class SnapshotPlugin extends Plugin {
                 call.reject(e.getMessage());
             }
         }).start();
+    }
+
+    private static String calculateSha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        StringBuilder hex = new StringBuilder(64);
+        for (byte value : digest.digest()) {
+            hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 0xff));
+        }
+        return hex.toString();
     }
 
     @PluginMethod

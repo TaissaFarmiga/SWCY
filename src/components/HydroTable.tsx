@@ -81,7 +81,7 @@ export default function HydroTable() {
 
       {/* 垂线列表 */}
       <div className="flex flex-col gap-1.5">
-        <AnimatePresence mode="popLayout">
+        <AnimatePresence>
           {currentRun.verticals.map((vertical, idx) => (
             <VerticalCard key={vertical.id} vertical={vertical} index={idx} isLast={idx === currentRun.verticals.length - 1} />
           ))}
@@ -89,7 +89,7 @@ export default function HydroTable() {
       </div>
 
       <button onClick={addVertical}
-        className="flex items-center justify-center gap-1 p-1.5 rounded-lg bg-white/40 dark:bg-gray-900/40 border border-dashed border-slate-300 dark:border-gray-600 text-sm text-slate-500 dark:text-slate-400 hover:border-hydro-blue dark:hover:border-hydro-blue-light hover:text-hydro-blue dark:hover:text-cyan-400 transition-colors">
+        className="flex min-h-11 items-center justify-center gap-1 p-1.5 rounded-lg bg-white/40 dark:bg-gray-900/40 border border-dashed border-slate-300 dark:border-gray-600 text-sm text-slate-500 dark:text-slate-400 hover:border-hydro-blue dark:hover:border-hydro-blue-light hover:text-hydro-blue dark:hover:text-cyan-400 transition-colors">
         <Plus className="w-3.5 h-3.5" /><span>添加测速垂线</span>
       </button>
     </div>

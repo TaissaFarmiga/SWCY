@@ -4,14 +4,18 @@ import { Capacitor } from '@capacitor/core';
 import App from './App.tsx';
 import './index.css';
 
-// 【Capacitor 清道夫】暴力注销所有残留的 Service Worker，防止劫持主文档路由
+// Web 生产环境启用 PWA；Capacitor WebView 只清理历史注册，保护 OTA/Snapshot 请求链。
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (let registration of registrations) {
-      registration.unregister();
-      console.log('[SW-UNREG] 已强制注销残留的 Service Worker:', registration.scope);
-    }
-  });
+  if (Capacitor.isNativePlatform()) {
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .catch((error: unknown) => console.warn('[PWA] 原生端 Service Worker 清理失败', error));
+  } else if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .catch((error: unknown) => console.warn('[PWA] Service Worker 注册失败', error));
+    }, { once: true });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

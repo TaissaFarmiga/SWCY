@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
-import type { Run } from '../types';
+import type { Run, Vertical } from '../types';
 import { useHydroStore } from '../store/hydroStore';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -117,7 +117,7 @@ function copyRowStyle(sourceRow: ExcelJS.Row, targetRow: ExcelJS.Row) {
 function colToLetter(col: number): string {
   let letter = '';
   while (col > 0) {
-    let temp = (col - 1) % 26;
+    const temp = (col - 1) % 26;
     letter = String.fromCharCode(temp + 65) + letter;
     col = (col - temp - 1) / 26;
   }
@@ -160,7 +160,9 @@ function shiftMergesDown(sheet: ExcelJS.Worksheet, afterRow: number, numRows: nu
   for (const m of toShift) {
     try {
       sheet.unMergeCells(`${m.startCol}${m.startRow}:${m.endCol}${m.endRow}`);
-    } catch (e) {}
+    } catch (error) {
+      console.debug('[Excel] 跳过无效合并区域', error);
+    }
   }
 
   sheet.model.merges = untouched;
@@ -252,7 +254,9 @@ function buildSheet2(workbook: ExcelJS.Workbook, run: Run): void {
           if (masterCell.style) slaveCell.style = JSON.parse(JSON.stringify(masterCell.style));
           slaveCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
           slaveCell.alignment = { vertical: 'middle', horizontal: 'center' };
-        } catch (e) {}
+        } catch (error) {
+          console.debug('[Excel] 测点列未处于合并状态', error);
+        }
       }
     }
 
@@ -278,8 +282,8 @@ function buildSheet2(workbook: ExcelJS.Workbook, run: Run): void {
         const colL = colToLetter(col);
         try {
           sheet2.unMergeCells(`${colL}${startRow}:${colL}${startRow + 1}`);
-        } catch (e) {
-          // 容错
+        } catch (error) {
+          console.debug('[Excel] 动态行原合并区域不存在', error);
         }
         sheet2.mergeCells(`${colL}${startRow}:${colL}${startRow + pointCount - 1}`);
       }
@@ -314,7 +318,7 @@ function buildSheet2(workbook: ExcelJS.Workbook, run: Run): void {
         const prevIsBank = parseFloat(prev.waterDepth || '0') === 0 || prev.type === 'edge';
         const currIsBank = parseFloat(v.waterDepth || '0') === 0 || v.type === 'edge';
         
-        const getKa = (vert: any) => parseFloat(vert.type === 'edge' ? (vert.shoreCoefficient || '0.70') : (vert.deflectionCoefficient || '1.0'));
+        const getKa = (vert: Vertical) => parseFloat(vert.type === 'edge' ? (vert.shoreCoefficient || '0.70') : (vert.deflectionCoefficient || '1.0'));
 
         if (prevIsBank) rawAvgVel = currVel * getKa(prev);
         else if (currIsBank) rawAvgVel = prevVel * getKa(v);

@@ -55,7 +55,7 @@ function GlassButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg backdrop-blur-md border shadow-sm transition-all active:scale-95 shrink-0 disabled:opacity-40 ${
+      className={`flex min-h-11 min-w-11 items-center justify-center gap-1 px-2 py-1.5 rounded-lg backdrop-blur-md border shadow-sm transition-all active:scale-95 shrink-0 disabled:opacity-40 ${
         highlight
           ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/20 hover:bg-blue-700'
           : 'bg-white/60 dark:bg-gray-800/60 border-white/80 dark:border-gray-600/50 text-slate-700 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-gray-700/80'
@@ -114,7 +114,7 @@ export default function Dashboard() {
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded-lg bg-white/40 dark:bg-gray-800/40 border border-white/60 dark:border-gray-700/60 shadow-sm active:scale-95 transition-all shrink-0"
+          className="absolute right-0 top-1/2 flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg bg-white/40 dark:bg-gray-800/40 border border-white/60 dark:border-gray-700/60 shadow-sm active:scale-95 transition-all shrink-0"
           title={expanded ? '收起' : '展开更多数据'}
         >
           <ChevronDown

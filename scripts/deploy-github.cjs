@@ -1,251 +1,215 @@
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { execSync } = require('child_process');
-const https = require('https');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
-// 1. 本地免配置沙盒环境注入 (动态获取 Windows 路径，防止系统变量冲突)
-const username = os.userInfo().username;
-process.env.ANDROID_HOME = `C:\\Users\\${username}\\AppData\\Local\\Android\\Sdk`;
+const REPOSITORY = 'TaissaFarmiga/SWCY';
+const API_BASE = `https://api.github.com/repos/${REPOSITORY}`;
+const ROOT = path.resolve(__dirname, '..');
+const APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/debug/app-debug.apk');
 
-// 💡 智能雷达扫描：自动探测并还原真实的 JAVA_HOME (兼容 jbr/jre 差异及自定义路径)
-let javaHome = '';
-console.log('🔍 [OTA DEPLOY] 正在启动雷达自检，自动检索本地 JDK 编译环境...');
-
-// 降级策略 1: 扫描 Android Studio 常规内置 JDK 物理路径
-const commonAsPaths = [
-  `C:\\Program Files\\Android\\Android Studio\\jbr`,
-  `C:\\Program Files\\Android\\Android Studio\\jre`,
-  `C:\\Program Files(x86)\\Android\\Android Studio\\jbr`,
-  `C:\\Program Files(x86)\\Android\\Android Studio\\jre`
-];
-for (const p of commonAsPaths) {
-  if (fs.existsSync(p)) {
-    javaHome = p;
-    break;
-  }
+function commandName(name) {
+  return process.platform === 'win32' ? `${name}.cmd` : name;
 }
 
-// 降级策略 2: 若常规路径未命中，调用 where.exe 在 Android 目录下递归检索 java.exe 并反向推导
-if (!javaHome) {
-  try {
-    const searchPath = `C:\\Program Files\\Android`;
-    if (fs.existsSync(searchPath)) {
-      const output = execSync(`where.exe /R "${searchPath}" java.exe`, { encoding: 'utf-8', stdio: [] });
-      const firstLine = output.split('\n')[0].trim();
-      if (firstLine && fs.existsSync(firstLine)) {
-        // 从 path\to\bin\java.exe 向上截取两级得到 JAVA_HOME
-        javaHome = path.dirname(path.dirname(firstLine));
-      }
-    }
-  } catch (e) {
-    // 忽略异常，由后续降级策略继续补位
-  }
-}
-
-// 降级策略 3: 全局雷达探测
-if (!javaHome) {
-  try {
-    const output = execSync('where.exe java.exe', { encoding: 'utf-8', stdio: [] });
-    const firstLine = output.split('\n')[0].trim();
-    if (firstLine && fs.existsSync(firstLine)) {
-      javaHome = path.dirname(path.dirname(firstLine));
-    }
-  } catch (e) {
-    // 忽略
-  }
-}
-
-// 降级策略 4: 保底读取系统环境
-if (!javaHome && process.env.JAVA_HOME && fs.existsSync(process.env.JAVA_HOME)) {
-  javaHome = process.env.JAVA_HOME;
-}
-
-if (!javaHome) {
-  console.error('❌ [OTA DEPLOY] 雷达自检失败：未能在你的电脑上定位到有效的 Java 编译环境！');
-  console.error('👉 请确认是否正常安装了 Android Studio 或者是 JDK 17，并保持默认安装路径。');
-  process.exit(1);
-}
-
-process.env.JAVA_HOME = javaHome;
-process.env.PATH = `${process.env.PATH};${process.env.ANDROID_HOME}\\platform-tools;${process.env.JAVA_HOME}\\bin`;
-
-console.log('🤖 [OTA DEPLOY] 正在启动本地沙盒编译部署系统...');
-console.log(`🤖 [OTA DEPLOY] 动态注入 ANDROID_HOME: ${process.env.ANDROID_HOME}`);
-console.log(`🤖 [OTA DEPLOY] 雷达探测定位 JAVA_HOME: ${process.env.JAVA_HOME}`);
-
-// 2. 读取并解析 .env
-let token = '';
-try {
-  const envContent = fs.readFileSync('.env', 'utf-8');
-  const match = envContent.match(/GITHUB_TOKEN=(ghp_[a-zA-Z0-9]+)/);
-  if (match) {
-    token = match[1];
-  }
-} catch (e) {
-  console.error('❌ [OTA DEPLOY] 无法读取 .env 文件，请先创建并存入 GITHUB_TOKEN');
-  process.exit(1);
-}
-
-if (!token || token.includes('请在此处')) {
-  console.error('❌ [OTA DEPLOY] 未检测到有效的 GITHUB_TOKEN，请先在 .env 文件中粘贴你的 ghp_ 密钥');
-  process.exit(1);
-}
-
-// 3. 自动递增版本号并对齐 Android 的 build.gradle
-const packageJsonPath = path.join(__dirname, '../package.json');
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-const oldVersion = packageJson.version;
-
-const parts = oldVersion.split('.').map(Number);
-parts[2] += 1; // 自动递增 Patch 版本号
-const newVersion = parts.join('.');
-packageJson.version = newVersion;
-fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
-
-// 对齐 android/app/build.gradle 中的 versionName
-const gradlePath = path.join(__dirname, '../android/app/build.gradle');
-try {
-  let gradleContent = fs.readFileSync(gradlePath, 'utf-8');
-  gradleContent = gradleContent.replace(/versionName\s+"[^"]+"/, `versionName "${newVersion}"`);
-  // 同时递增 versionCode (取当前时间戳的前10位，防止溢出)
-  const newVersionCode = Math.floor(Date.now() / 100000);
-  gradleContent = gradleContent.replace(/versionCode\s+\d+/, `versionCode ${newVersionCode}`);
-  fs.writeFileSync(gradlePath, gradleContent, 'utf-8');
-  console.log(`✅ [OTA DEPLOY] 版本号成功升级: ${oldVersion} 🚀 ${newVersion} (Code: ${newVersionCode})`);
-} catch (err) {
-  console.error('❌ [OTA DEPLOY] 对齐 build.gradle 失败，请检查路径:', err.message);
-  process.exit(1);
-}
-
-// 4. 执行本地物理编译与 Capacitor 同步
-try {
-  console.log('📦 [OTA DEPLOY] 正在编译 React 生产包...');
-  execSync('npm run build', { stdio: 'inherit' });
-
-  console.log('📦 [OTA DEPLOY] 正在同步 Web 资源到 Capacitor...');
-  execSync('npx cap sync', { stdio: 'inherit' });
-
-  console.log('📦 [OTA DEPLOY] 正在调用本地 Gradle 编译 APK 大包...');
-  // Windows 使用 gradlew.bat，CWD 设为 android 子目录
-  execSync('gradlew.bat assembleDebug', { cwd: 'android', stdio: 'inherit', shell: true });
-} catch (err) {
-  console.error('❌ [OTA DEPLOY] 编译打包过程中发生异常，中断发布！');
-  process.exit(1);
-}
-
-// 5. 验证编译包物理存在
-const apkPath = path.join(__dirname, '../android/app/build/outputs/apk/debug/app-debug.apk');
-if (!fs.existsSync(apkPath)) {
-  console.error('❌ [OTA DEPLOY] 编译成功但未找到生成的 APK 包，请检查 Android 项目配置');
-  process.exit(1);
-}
-console.log('✅ [OTA DEPLOY] APK 物理大包生成成功！');
-
-// 6. 执行 Git Commit 与 Push Tag (智能兼容本地活跃分支，拒绝死板硬编码)
-try {
-  console.log('🚀 [OTA DEPLOY] 正在提交本地更改并推送 Tag...');
-  execSync('git add .', { stdio: 'inherit' });
-  execSync(`git commit -m "feat: 自动化升级至 v${newVersion}"`, { stdio: 'inherit' });
-  execSync(`git tag v${newVersion}`, { stdio: 'inherit' });
-  
-  // 自动雷达探测本地当前处于哪个开发分支，防止硬编码 main/master 导致推送失败
-  const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
-  console.log(`🚀 [OTA DEPLOY] 检测到当前本地活跃分支为: [${currentBranch}]，正在安全推送至远程...`);
-  
-  execSync(`git push origin ${currentBranch}`, { stdio: 'inherit' });
-  execSync(`git push origin v${newVersion}`, { stdio: 'inherit' });
-} catch (err) {
-  console.warn('⚠️ [OTA DEPLOY] Git 推送失败（可能是没有需要提交的内容或远程冲突），继续执行 API 发布...', err.message);
-}
-
-// 7. 调用 GitHub API 自动创建 Release 并上传资源 (纯原生 Node https 请求)
-const repoOwner = 'TaissaFarmiga';
-const repoName = 'SWCY';
-
-const requestOptions = {
-  host: 'api.github.com',
-  headers: {
-    'User-Agent': 'HydroTerminal-Deploy-Script',
-    'Authorization': `token ${token}`,
-    'Accept': 'application/vnd.github+json',
-    'Content-Type': 'application/json'
-  }
-};
-
-const createReleaseData = JSON.stringify({
-  tag_name: `v${newVersion}`,
-  name: `${newVersion} 最新版本`,
-  body: `v${newVersion}\n\nfeat: 自动化发布更新。`,
-  draft: false,
-  prerelease: false
-});
-
-console.log('🚀 [OTA DEPLOY] 正在向 GitHub 请求创建最新 Release 节点...');
-
-const req = https.request({
-  ...requestOptions,
-  path: `/repos/${repoOwner}/${repoName}/releases`,
-  method: 'POST'
-}, (res) => {
-  let responseBody = '';
-  res.on('data', (chunk) => responseBody += chunk);
-  res.on('end', () => {
-    if (res.statusCode !== 201) {
-      console.error(`❌ [OTA DEPLOY] 创建 Release 失败 (HTTP ${res.statusCode}):`, responseBody);
-      process.exit(1);
-    }
-    const release = JSON.parse(responseBody);
-    console.log(`✅ [OTA DEPLOY] GitHub Release 节点创建成功！ID: ${release.id}`);
-    
-    // 提取上传资源的 host
-    const uploadUrlTemplate = release.upload_url;
-    const uploadUrl = uploadUrlTemplate.split('{')[0] + `?name=update.apk`;
-    
-    uploadApkAsset(uploadUrl, apkPath);
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd || ROOT,
+    env: options.env || process.env,
+    encoding: 'utf8',
+    stdio: options.capture ? 'pipe' : 'inherit',
+    shell: false,
   });
-});
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const details = options.capture ? `\n${result.stderr || result.stdout || ''}` : '';
+    throw new Error(`${command} ${args.join(' ')} 失败，退出码 ${result.status}${details}`);
+  }
+  return options.capture ? (result.stdout || '').trim() : '';
+}
 
-req.on('error', (err) => {
-  console.error('❌ [OTA DEPLOY] 创建 Release 网络请求失败:', err);
-});
-req.write(createReleaseData);
-req.end();
+function git(args, options = {}) {
+  return run('git', args, options);
+}
 
-// 上传 APK 附件
-function uploadApkAsset(url, filePath) {
-  const fileStats = fs.statSync(filePath);
-  const fileStream = fs.readFileSync(filePath);
-  const parsedUrl = new URL(url);
+function readToken() {
+  if (process.env.GITHUB_TOKEN?.trim()) return process.env.GITHUB_TOKEN.trim();
+  const envPath = path.join(ROOT, '.env');
+  if (!fs.existsSync(envPath)) throw new Error('缺少 GITHUB_TOKEN：请设置环境变量或本地 .env');
+  const line = fs.readFileSync(envPath, 'utf8').split(/\r?\n/).find((item) => /^\s*GITHUB_TOKEN\s*=/.test(item));
+  if (!line) throw new Error('本地 .env 未配置 GITHUB_TOKEN');
+  const token = line.replace(/^\s*GITHUB_TOKEN\s*=\s*/, '').trim().replace(/^['"]|['"]$/g, '');
+  if (!/^(?:ghp_|github_pat_|gho_|ghu_)[A-Za-z0-9_]+$/.test(token)) throw new Error('GITHUB_TOKEN 格式无效');
+  return token;
+}
 
-  console.log(`🚀 [OTA DEPLOY] 正在向 GitHub 满速上传 APK 安装包资产 (${(fileStats.size / 1024 / 1024).toFixed(2)} MB)...`);
+function authenticatedGitEnvironment(token) {
+  const basic = Buffer.from(`x-access-token:${token}`, 'utf8').toString('base64');
+  return {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.extraHeader',
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
+  };
+}
 
-  const uploadReq = https.request({
-    host: parsedUrl.host,
-    path: parsedUrl.pathname + parsedUrl.search,
-    method: 'POST',
+function normalizeVersion(value) {
+  const match = String(value).trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
+  if (!match) throw new Error(`版本号格式无效：${value}`);
+  return `${Number(match[1])}.${Number(match[2])}.${Number(match[3])}`;
+}
+
+function compareVersions(a, b) {
+  const left = normalizeVersion(a).split('.').map(Number);
+  const right = normalizeVersion(b).split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] > right[index] ? 1 : -1;
+  }
+  return 0;
+}
+
+async function githubRequest(token, endpoint, options = {}) {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
     headers: {
-      'User-Agent': 'HydroTerminal-Deploy-Script',
-      'Authorization': `token ${token}`,
-      'Accept': 'application/vnd.github+json',
-      'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Length': fileStats.size
-    }
-  }, (res) => {
-    let responseBody = '';
-    res.on('data', (chunk) => responseBody += chunk);
-    res.on('end', () => {
-      if (res.statusCode === 201) {
-        console.log('🎉 [OTA DEPLOY] 全流程大功告成！手机端双轨控制台已准备就绪，点击即可秒级更新！');
-      } else {
-        console.error(`❌ [OTA DEPLOY] 附件上传失败 (HTTP ${res.statusCode}):`, responseBody);
-      }
-    });
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'HydroTerminal-Release',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...options.headers,
+    },
   });
-
-  uploadReq.on('error', (err) => {
-    console.error('❌ [OTA DEPLOY] 上传 APK 网络请求发生崩溃:', err);
-  });
-  uploadReq.write(fileStream);
-  uploadReq.end();
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(`GitHub API ${options.method || 'GET'} ${endpoint} 失败（HTTP ${response.status}）：${data?.message || text}`);
+  }
+  return data;
 }
+
+function assertCleanWorktree(stage) {
+  const status = git(['status', '--porcelain'], { capture: true });
+  if (status) throw new Error(`${stage}检测到未提交修改；发布已停止，禁止自动 git add`);
+}
+
+function sha256(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+async function main() {
+  const token = readToken();
+  const gitEnv = authenticatedGitEnvironment(token);
+  const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const version = normalizeVersion(packageJson.version);
+  const tag = `v${version}`;
+  const branch = git(['branch', '--show-current'], { capture: true });
+  const origin = git(['remote', 'get-url', 'origin'], { capture: true });
+
+  if (!['main', 'master'].includes(branch)) throw new Error(`只允许从 main/master 发布，当前分支：${branch}`);
+  if (!/^(?:https:\/\/github\.com\/|git@github\.com:)TaissaFarmiga\/SWCY(?:\.git)?$/i.test(origin)) {
+    throw new Error(`origin 必须指向 GitHub ${REPOSITORY}，当前：${origin}`);
+  }
+  assertCleanWorktree('发布前');
+
+  const latest = await githubRequest(token, '/releases/latest');
+  if (compareVersions(version, latest.tag_name) <= 0) {
+    throw new Error(`待发布版本 ${version} 必须高于 GitHub 最新版本 ${latest.tag_name}`);
+  }
+  const remoteTag = git(['ls-remote', '--tags', 'origin', `refs/tags/${tag}`], { capture: true, env: gitEnv });
+  if (remoteTag) throw new Error(`远端标签 ${tag} 已存在，禁止覆盖`);
+
+  console.log(`[release] 验证 ${tag}`);
+  run(commandName('npm'), ['run', 'typecheck']);
+  run(commandName('npm'), ['run', 'lint']);
+  run(commandName('npm'), ['test']);
+  run(commandName('npm'), ['run', 'build']);
+  run(commandName('npx'), ['cap', 'sync', 'android']);
+  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleDebug', '--no-daemon', '--console=plain', '-q'], { cwd: path.join(ROOT, 'android') });
+
+  if (!fs.existsSync(APK_PATH) || fs.statSync(APK_PATH).size <= 0) throw new Error('Android APK 未生成');
+  assertCleanWorktree('构建后');
+
+  const commit = git(['rev-parse', 'HEAD'], { capture: true });
+  const digest = sha256(APK_PATH);
+  const size = fs.statSync(APK_PATH).size;
+
+  console.log(`[release] 推送源码 ${commit.slice(0, 12)} 到 GitHub main`);
+  git(['push', 'origin', 'HEAD:main'], { env: gitEnv });
+  git(['tag', '-a', tag, '-m', `水文测验终端 ${tag}`]);
+  try {
+    git(['push', 'origin', tag], { env: gitEnv });
+  } catch (error) {
+    git(['tag', '-d', tag]);
+    throw error;
+  }
+
+  let release = null;
+  try {
+    release = await githubRequest(token, '/releases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tag_name: tag,
+        target_commitish: commit,
+        name: `水文测验终端 ${tag}`,
+        body: `## 更新内容\n\n- 水准测量完整闭环与成果导出\n- 流量偏离率、电子气泡工具\n- 首页版本更新中心与移动端交互优化\n- GitHub 单一可信更新通道\n\nAPK SHA-256: \`${digest}\``,
+        draft: true,
+        prerelease: false,
+        generate_release_notes: true,
+      }),
+    });
+
+    const uploadResponse = await fetch(`${release.upload_url.split('{')[0]}?name=update.apk`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/vnd.android.package-archive',
+        'Content-Length': String(size),
+        'User-Agent': 'HydroTerminal-Release',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: fs.readFileSync(APK_PATH),
+    });
+    const uploadText = await uploadResponse.text();
+    if (!uploadResponse.ok) throw new Error(`APK 上传失败（HTTP ${uploadResponse.status}）：${uploadText}`);
+
+    const draft = await githubRequest(token, `/releases/${release.id}`);
+    const draftAsset = draft.assets.find((item) => item.name === 'update.apk' && item.state === 'uploaded');
+    if (!draftAsset || draftAsset.size !== size || draftAsset.digest !== `sha256:${digest}`) {
+      throw new Error('GitHub Draft Release 回读校验失败：APK 大小或 SHA-256 不一致');
+    }
+
+    await githubRequest(token, `/releases/${release.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft: false }),
+    });
+  } catch (error) {
+    if (release?.id) {
+      try { await githubRequest(token, `/releases/${release.id}`, { method: 'DELETE' }); } catch { /* best effort */ }
+    }
+    try { git(['push', 'origin', `:refs/tags/${tag}`], { env: gitEnv }); } catch { /* best effort */ }
+    try { git(['tag', '-d', tag]); } catch { /* best effort */ }
+    throw error;
+  }
+
+  const published = await githubRequest(token, `/releases/tags/${tag}`);
+  const asset = published.assets.find((item) => item.name === 'update.apk' && item.state === 'uploaded');
+  if (!asset || asset.size !== size || asset.digest !== `sha256:${digest}`) throw new Error('已发布 Release 回读失败');
+
+  console.log(JSON.stringify({
+    version,
+    tag,
+    commit,
+    releaseUrl: published.html_url,
+    apkSize: size,
+    sha256: digest,
+  }, null, 2));
+}
+
+main().catch((error) => {
+  console.error(`[release] ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+});

@@ -10,6 +10,7 @@
 
 import { Decimal } from 'decimal.js';
 import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula, getMethodDepthPoints, DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT } from '../types';
+import { toFiniteDecimal } from './rounding';
 
 // 强制开启国标修约：四舍六入五成双 (Banker's Rounding)
 Decimal.set({ rounding: Decimal.ROUND_HALF_EVEN });
@@ -18,11 +19,12 @@ Decimal.set({ rounding: Decimal.ROUND_HALF_EVEN });
 // 模块一：安全数据转换与国标有效数字修约 (Significant Figures)
 // ============================================================================
 
-export function safeDecimal(val: any): Decimal {
-    if (val === '' || val === null || val === undefined) return new Decimal(0);
-    const num = Number(val);
-    if (isNaN(num)) return new Decimal(0);
-    return new Decimal(String(val));
+export function safeDecimal(val: unknown): Decimal {
+    return toFiniteDecimal(val) ?? new Decimal(0);
+}
+
+export function hasFiniteNumericInput(value: unknown): boolean {
+    return toFiniteDecimal(value) !== null;
 }
 
 export function roundGbArea(val: Decimal): number {
@@ -64,8 +66,9 @@ export function calculateEffectiveDepth(v: Vertical, fp: FlowPeriod): Decimal {
 }
 
 export function calculateVelocityFromFormula(n: number | string, t: number | string, f: MeterFormula = DEFAULT_METER_FORMULA): Decimal {
+    if (!hasFiniteNumericInput(n) || !hasFiniteNumericInput(t)) return new Decimal(0);
     const nv = safeDecimal(n);
-    const tv = safeDecimal(t || 100);
+    const tv = safeDecimal(t);
     if (tv.isZero() || tv.lessThan(0.1)) return new Decimal(0);
     return safeDecimal(f.k).times(nv).dividedBy(tv).plus(safeDecimal(f.c));
 }
@@ -73,7 +76,13 @@ export function calculateVelocityFromFormula(n: number | string, t: number | str
 export function calculatePointVelocity(p: MeasurePoint, f: MeterFormula = DEFAULT_METER_FORMULA): Decimal {
     return (p.mode || 'direct') === 'direct'
         ? safeDecimal(p.velocity)
-        : calculateVelocityFromFormula(p.n || 0, p.t || 100, f);
+        : calculateVelocityFromFormula(p.n ?? '', p.t ?? '', f);
+}
+
+function hasCompleteVelocityInput(point: MeasurePoint): boolean {
+    if ((point.mode || 'direct') === 'direct') return hasFiniteNumericInput(point.velocity);
+    const elapsed = toFiniteDecimal(point.t);
+    return hasFiniteNumericInput(point.n) && elapsed !== null && elapsed.greaterThanOrEqualTo(0.1);
 }
 
 export function calculateVerticalMeanVelocity(pts: MeasurePoint[], _method: MeasureMethod, _fp: FlowPeriod, f: MeterFormula = DEFAULT_METER_FORMULA): Decimal {
@@ -96,12 +105,21 @@ export function calculateVerticalMeanVelocity(pts: MeasurePoint[], _method: Meas
 // 模块三：梯级截断积分推导 (所见即所算)
 // ============================================================================
 
-export function applyVelocityCorrection(vel: Decimal, v: Vertical, _effD: Decimal): Decimal {
+export function applyVelocityCorrection(vel: Decimal, v: Vertical): Decimal {
     const coeff = safeDecimal(v.type === 'edge' ? (v.shoreCoefficient || DEFAULT_SHORE_COEFFICIENT) : (v.deflectionCoefficient || '1.0'));
     return vel.times(coeff);
 }
 
-function computeStep(prev: any, curr: any, dp: number, dc: number) {
+interface CalculationStep {
+    vertical: Vertical;
+    effDec: Decimal;
+    velDec: Decimal;
+    areaNum: number;
+    meanVelNum: number;
+    dischargeNum: number;
+}
+
+function computeStep(prev: CalculationStep, curr: CalculationStep, dp: number, dc: number) {
     const distance = new Decimal(String(Math.abs(dc - dp)));
     if (distance.isZero()) return { areaNum: 0, meanVelNum: 0, dischargeNum: 0 };
 
@@ -117,7 +135,7 @@ function computeStep(prev: any, curr: any, dp: number, dc: number) {
     let rawAvgVel = new Decimal(0);
    const prevIsBank = prev.effDec.isZero() || prev.vertical.type === 'edge';
     const currIsBank = curr.effDec.isZero() || curr.vertical.type === 'edge';
-    const getKa = (v: any) => safeDecimal(v.type === 'edge' ? (v.shoreCoefficient || DEFAULT_SHORE_COEFFICIENT) : (v.deflectionCoefficient || '1.0'));
+    const getKa = (v: Vertical) => safeDecimal(v.type === 'edge' ? (v.shoreCoefficient || DEFAULT_SHORE_COEFFICIENT) : (v.deflectionCoefficient || '1.0'));
 
     if (prevIsBank) {
         rawAvgVel = curr.velDec.times(getKa(prev.vertical));
@@ -141,7 +159,7 @@ function computeStep(prev: any, curr: any, dp: number, dc: number) {
 // 模块四：主计算引擎入口 & 状态工厂
 // ============================================================================
 
-export function processRun(run: any): any {
+export function processRun(run: Run): Run {
     const { verticals, flowPeriod, meterFormula = DEFAULT_METER_FORMULA } = run;
     if (!verticals || verticals.length < 2) return run;
 
@@ -154,13 +172,23 @@ export function processRun(run: any): any {
         const valB = isNaN(dB) ? ((b.name || '').includes('左') ? -Infinity : Infinity) : dB;
         return valA - valB;
     });
+    const measureVerticals = spatial.filter((vertical) => vertical.type === 'measure');
+    const hasMeasurements = measureVerticals.length > 0;
+    const distancesComplete = spatial.every((vertical) => hasFiniteNumericInput(vertical.startDistance));
+    const depthsComplete = hasMeasurements && measureVerticals.every((vertical) => hasFiniteNumericInput(vertical.waterDepth));
+    const velocitiesComplete = hasMeasurements && measureVerticals.every((vertical) => (
+        vertical.measurePoints.length > 0
+        && vertical.measurePoints.every(hasCompleteVelocityInput)
+    ));
+    const geometryComplete = distancesComplete && depthsComplete;
+    const dischargeComplete = geometryComplete && velocitiesComplete;
     // 2. 预计算节点参数
-    const steps: any[] = spatial.map(v => {
+    const steps: CalculationStep[] = spatial.map(v => {
         const effDec = calculateEffectiveDepth(v, flowPeriod);
         let velDec = new Decimal(0);
         if (v.type === 'measure') {
             const rawVel = calculateVerticalMeanVelocity(v.measurePoints, v.measureMethod, flowPeriod, meterFormula);
-            const unroundedVelDec = applyVelocityCorrection(rawVel, v, effDec);
+            const unroundedVelDec = applyVelocityCorrection(rawVel, v);
             // 🔪 终极阻断：把全精度系数乘法的结果，强制转化为国标修约后的值！所见即所算！
             velDec = new Decimal(String(roundGbVelocity(unroundedVelDec)));
         }
@@ -177,7 +205,7 @@ export function processRun(run: any): any {
         steps[i].dischargeNum = res.dischargeNum;
     }
 
-    const resultDict = new Map<string, any>();
+    const resultDict = new Map<string, CalculationStep>();
     steps.forEach(s => resultDict.set(s.vertical.id, s));
 
     // 使用 Decimal 杜绝总面积/总流量的累加漂移
@@ -187,9 +215,9 @@ export function processRun(run: any): any {
 
     // 🔪 物理算法校准：遍历全断面所有测点，抓取纯正、未折减的物理测点最大流速
     let maxVelDec = new Decimal(0);
-    verticals.forEach((v: any) => {
+    verticals.forEach((v) => {
         if (v.type === 'measure' && v.measurePoints) {
-            v.measurePoints.forEach((mp: any) => {
+            v.measurePoints.forEach((mp) => {
                 const ptVel = calculatePointVelocity(mp, meterFormula);
                 if (ptVel.greaterThan(maxVelDec)) {
                     maxVelDec = ptVel;
@@ -199,7 +227,7 @@ export function processRun(run: any): any {
     });
     const maxVelVal = maxVelDec.toNumber();
 
-    const outputVerticals = run.verticals.map((ov: any) => {
+    const outputVerticals = run.verticals.map((ov) => {
         const s = resultDict.get(ov.id);
         if (!s) return { ...ov };
 
@@ -213,21 +241,26 @@ export function processRun(run: any): any {
         totalDischargeDec = totalDischargeDec.plus(s.dischargeNum);
 
         // 为了 UI 呈现美观，统一强制 toFixed() 输出格式
+        const verticalDepthComplete = ov.type === 'edge' || hasFiniteNumericInput(ov.waterDepth);
+        const verticalVelocityComplete = ov.type === 'edge'
+            || (ov.measurePoints.length > 0 && ov.measurePoints.every(hasCompleteVelocityInput));
         return {
             ...ov,
-            effectiveDepth: s.effDec.toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toFixed(2),
-            correctedVelocity: ov.type.includes('bank') || ov.type === 'edge' ? '0.00' : String(roundGbVelocity(s.velDec)),
-            partialArea: safeDecimal(s.areaNum).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toString(),
-            partialDischarge: safeDecimal(s.dischargeNum).toDecimalPlaces(3, Decimal.ROUND_HALF_EVEN).toString(),
+            effectiveDepth: verticalDepthComplete ? s.effDec.toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toFixed(2) : '',
+            correctedVelocity: ov.type === 'edge' ? '0.00' : (verticalVelocityComplete ? String(roundGbVelocity(s.velDec)) : ''),
+            partialArea: geometryComplete ? safeDecimal(s.areaNum).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toString() : '',
+            partialDischarge: dischargeComplete ? safeDecimal(s.dischargeNum).toDecimalPlaces(3, Decimal.ROUND_HALF_EVEN).toString() : '',
             // 👇 新增解封字段：部分平均流速（直接取修约好的值）
             partialMeanVelocity: s.meanVelNum !== undefined ? String(s.meanVelNum) : '0',
-            measurePoints: (ov.measurePoints || []).map((mp: any) => ({
+            measurePoints: (ov.measurePoints || []).map((mp) => ({
                 ...mp,
-                absoluteDepth: calculateAbsolutePosition(
-                    s.effDec, 
-                    mp.relativeDepth, 
-                    safeDecimal(ov.waterIceThickness)
-                ).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toFixed(2)
+                absoluteDepth: verticalDepthComplete && hasFiniteNumericInput(mp.relativeDepth)
+                    ? calculateAbsolutePosition(
+                        s.effDec,
+                        mp.relativeDepth,
+                        safeDecimal(ov.waterIceThickness)
+                    ).toDecimalPlaces(2, Decimal.ROUND_HALF_EVEN).toFixed(2)
+                    : '',
             }))
         };
     });
@@ -250,12 +283,12 @@ export function processRun(run: any): any {
     return {
         ...run,
         verticals: outputVerticals,
-        totalArea: totalAreaStr,
-        totalDischarge: totalDischargeStr,
-        meanVelocity: meanVelocityStr,
-        surfaceWidth: surfaceWidth,
-        maxDepth: maxDepth.toFixed(2),
-        maxVelocity: maxVelVal.toFixed(2) // 精准对齐 0.43 原始物理流速
+        totalArea: geometryComplete ? totalAreaStr : '',
+        totalDischarge: dischargeComplete ? totalDischargeStr : '',
+        meanVelocity: dischargeComplete ? meanVelocityStr : '',
+        surfaceWidth: distancesComplete ? surfaceWidth : '',
+        maxDepth: depthsComplete ? maxDepth.toFixed(2) : '',
+        maxVelocity: velocitiesComplete ? maxVelVal.toFixed(2) : '', // 精准对齐 0.43 原始物理流速
     };
 }
 

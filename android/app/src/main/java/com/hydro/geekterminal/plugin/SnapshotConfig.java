@@ -1,8 +1,7 @@
 package com.hydro.geekterminal.plugin;
 
 /**
- * SnapshotSystem configuration constants.
- * Minimal skeleton — values are placeholders for future COS integration.
+ * Local Snapshot verification constants.
  */
 public final class SnapshotConfig {
 

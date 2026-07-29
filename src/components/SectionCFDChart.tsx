@@ -61,6 +61,7 @@ export interface SnappedPoint {
 }
 
 interface SectionCFDChartProps {
+  isActive?: boolean;
   onSnapChange?: (point: SnappedPoint | null) => void;
 }
 
@@ -256,7 +257,7 @@ function bilinearSample(grid: GridMeta, px: number, py: number): number {
 /* ════════════════════════════════════════
    主组件 — 纯图表引擎（无外壳，无拖拽）
    ════════════════════════════════════════ */
-export default function SectionCFDChart({ onSnapChange }: SectionCFDChartProps) {
+export default function SectionCFDChart({ isActive = true, onSnapChange }: SectionCFDChartProps) {
   const verticals = useHydroStore((s) => s.currentRun.verticals);
   const flowPeriod = useHydroStore((s) => s.currentRun.flowPeriod);
 
@@ -361,7 +362,7 @@ export default function SectionCFDChart({ onSnapChange }: SectionCFDChartProps) 
      性能极客优化：锁定 Y 轴虚拟分辨率，彻底剥离与物理高度 ch 的计算依赖！
      ════════════════════════════════════════ */
   useEffect(() => {
-    if (!isEngineReady) return; // 动画隔离：等待底部抽屉展开动画完成
+    if (!isEngineReady || !isActive) return; // 🧊 休眠舱断电：非激活态下彻底冻结网格重算
 
     if (!channelBounds || dataPoints.length < 3 || measureCount < MIN_VERTICALS) {
       gridRef.current = null;
@@ -464,14 +465,14 @@ export default function SectionCFDChart({ onSnapChange }: SectionCFDChartProps) 
     };
     // 触发主画布重绘的发令枪
     setGridVersion(v => v + 1);
-  }, [dataSig, cw, channelBounds, dataPoints, measureCount, verticals, isEngineReady]);
+  }, [dataSig, cw, channelBounds, dataPoints, measureCount, verticals, isEngineReady, isActive]);
 
   /* ════════════════════════════════════════
      主画布光速盖章
      v6.3 极客重构：必须使用 useLayoutEffect 同步拦截重绘，消灭 Canvas 缩放闪烁！
      ════════════════════════════════════════ */
   useLayoutEffect(() => {
-    if (!isEngineReady) return; // 动画隔离：等待底部抽屉展开动画完成
+    if (!isEngineReady || !isActive) return; // 🧊 休眠舱断电：非激活态下彻底冻结 GPU 重绘
 
     const canvas = mainCanvasRef.current;
     if (!canvas || !channelBounds || dataPoints.length < 3 || measureCount < MIN_VERTICALS || ch < 80) return;
@@ -709,7 +710,7 @@ export default function SectionCFDChart({ onSnapChange }: SectionCFDChartProps) 
     ctx.fillText('深度(m)', CHART_PADDING.left + 5, CHART_PADDING.top - 8);
     ctx.restore();
 
-  }, [dataSig, measureCount, channelBounds, dataPoints, cw, ch, verticals, snappedPoint, isEngineReady, gridVersion]);
+  }, [dataSig, measureCount, channelBounds, dataPoints, cw, ch, verticals, snappedPoint, isEngineReady, gridVersion, isActive]);
 
   /* ════════════════════════════════════════
      十字准星探针 — 叠层 Canvas HUD

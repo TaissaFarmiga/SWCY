@@ -135,7 +135,7 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             </div>
 
             {/* 模式切换按钮推到最右 */}
-            <button onClick={handleModeToggle} className="p-1 rounded bg-blue-500 text-white shadow-sm shrink-0 ml-auto transition-colors">
+            <button aria-label="切换为直接流速输入" onClick={handleModeToggle} className="flex min-h-11 min-w-11 items-center justify-center rounded bg-blue-500 text-white shadow-sm shrink-0 ml-auto transition-colors">
               <Calculator className="w-4 h-4" />
             </button>
           </div>
@@ -232,7 +232,7 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             </div>
 
             {/* 模式切换按钮 - 升级圆角 */}
-            <button onClick={handleModeToggle} className="p-1.5 rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
+            <button aria-label="切换为转数历时公式输入" onClick={handleModeToggle} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>

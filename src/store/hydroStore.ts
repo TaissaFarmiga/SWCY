@@ -19,7 +19,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula } from '../types';
 import { createNewRun, createMeasureVertical, processRun, createDefaultMeasurePoints } from '../lib/HydroEngine';
-import { DEFAULT_METER_FORMULA } from '../types';
+import { DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT } from '../types';
 import { downloadExcel } from '../lib/exportExcel';
 
 const STORAGE_KEY = 'hydrology-data';
@@ -36,18 +36,19 @@ export interface SectionTemplate {
     id: string;
     type: Vertical['type'];
     name?: string;
+    verticalNumber?: string;
     startDistance: string;
     measureMethod: MeasureMethod;
     deflectionCoefficient?: string;
     shoreCoefficient?: string;
-    waterDepth: '';                          // 强制置空
+    waterDepth: string;                      // 可保留断面几何水深
     iceThickness: '';                        // 强制置空
     waterIceThickness: '';                   // 强制置空
     iceFlowerThickness: '';                  // 强制置空
     measurePoints: Array<{
       id: string;
       relativeDepth: string;
-      mode: string;
+      mode: MeasurePoint['mode'];
       velocity: '';                          // 强制置空
       absoluteDepth: '';                     // 强制置空
       n: '';                                 // 强制置空
@@ -90,7 +91,7 @@ interface HydroState {
   exportCurrentRunJSON: () => void;
   getProcessedRun: () => Run;
   markTime: (type: 'start' | 'end') => void;
-  importBackup: (backupData: any) => void;
+  importBackup: (backupData: unknown) => void;
   /** 工作台隔离机制 */
   isDirty: boolean;
   commitCurrentRun: (mode: 'overwrite' | 'new') => void;
@@ -112,7 +113,138 @@ function mergeByRelativeDepth(newPts: MeasurePoint[], oldPts: MeasurePoint[]): M
   });
 }
 
-function calcAbs(wd: string, rd: string) { const w = +wd, r = +rd; return (!isNaN(w) && !isNaN(r)) ? (w * r).toFixed(2) : undefined; }
+function calcAbs(wd: string, rd: string): string | undefined {
+  if (wd.trim() === '' || rd.trim() === '') return undefined;
+  const w = Number(wd);
+  const r = Number(rd);
+  return Number.isFinite(w) && Number.isFinite(r) ? (w * r).toFixed(2) : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function stringValue(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+function optionalString(value: unknown): string | undefined {
+  const parsed = stringValue(value);
+  return parsed === '' ? undefined : parsed;
+}
+
+function measureMethodValue(value: unknown): MeasureMethod {
+  return value === 'two_point' || value === 'three_point' || value === 'five_point' || value === 'six_point'
+    ? value
+    : 'one_point';
+}
+
+function normalizeMeasurePoint(value: unknown): MeasurePoint | null {
+  if (!isRecord(value)) return null;
+  return {
+    id: stringValue(value.id, crypto.randomUUID()),
+    relativeDepth: stringValue(value.relativeDepth),
+    velocity: stringValue(value.velocity),
+    mode: value.mode === 'formula' ? 'formula' : 'direct',
+    n: optionalString(value.n),
+    t: optionalString(value.t),
+    absoluteDepth: optionalString(value.absoluteDepth),
+    absolutePosition: optionalString(value.absolutePosition),
+  };
+}
+
+function normalizeVertical(value: unknown, index: number): Vertical | null {
+  if (!isRecord(value)) return null;
+  const type: Vertical['type'] = value.type === 'edge' || stringValue(value.name).includes('水边') ? 'edge' : 'measure';
+  const measurePoints = Array.isArray(value.measurePoints)
+    ? value.measurePoints.map(normalizeMeasurePoint).filter((point): point is MeasurePoint => point !== null)
+    : [];
+  const samplerType = value.samplerType === 'horizontal' || value.samplerType === 'bottle' || value.samplerType === 'other'
+    ? value.samplerType
+    : undefined;
+  return {
+    id: stringValue(value.id, crypto.randomUUID()),
+    verticalNumber: stringValue(value.verticalNumber, type === 'edge' ? '' : String(index + 1)),
+    startDistance: stringValue(value.startDistance),
+    waterDepth: stringValue(value.waterDepth, type === 'edge' ? '0' : ''),
+    measureMethod: measureMethodValue(value.measureMethod),
+    measurePoints,
+    type,
+    name: optionalString(value.name),
+    interval: optionalString(value.interval),
+    shoreCoefficient: optionalString(value.shoreCoefficient),
+    deflectionCoefficient: optionalString(value.deflectionCoefficient),
+    iceThickness: optionalString(value.iceThickness),
+    waterIceThickness: optionalString(value.waterIceThickness),
+    iceFlowerThickness: optionalString(value.iceFlowerThickness),
+    samplerType,
+    singleSampleConc: optionalString(value.singleSampleConc),
+    sandBucketNo: optionalString(value.sandBucketNo),
+    sandBucketWeight: optionalString(value.sandBucketWeight),
+    sampleVolume: optionalString(value.sampleVolume),
+    effectiveDepth: optionalString(value.effectiveDepth),
+    meanVelocity: optionalString(value.meanVelocity),
+    correctedVelocity: optionalString(value.correctedVelocity),
+    partialArea: optionalString(value.partialArea),
+    partialDischarge: optionalString(value.partialDischarge),
+    partialMeanVelocity: optionalString(value.partialMeanVelocity),
+    totalSedimentDischarge: optionalString(value.totalSedimentDischarge),
+    meanSedimentConc: optionalString(value.meanSedimentConc),
+    isExpanded: typeof value.isExpanded === 'boolean' ? value.isExpanded : undefined,
+    showResults: typeof value.showResults === 'boolean' ? value.showResults : undefined,
+  };
+}
+
+function normalizeImportedRun(value: unknown): Run | null {
+  if (!isRecord(value) || !Array.isArray(value.verticals)) return null;
+  const flowPeriod: FlowPeriod = value.flowPeriod === 'ice' ? 'ice' : 'open';
+  const base = createNewRun(1, flowPeriod);
+  const verticals = value.verticals
+    .map(normalizeVertical)
+    .filter((vertical): vertical is Vertical => vertical !== null);
+  const meterFormula = isRecord(value.meterFormula)
+    && typeof value.meterFormula.k === 'number'
+    && Number.isFinite(value.meterFormula.k)
+    && typeof value.meterFormula.c === 'number'
+    && Number.isFinite(value.meterFormula.c)
+    ? { k: value.meterFormula.k, c: value.meterFormula.c }
+    : { ...DEFAULT_METER_FORMULA };
+  const defaultSamplerType = value.defaultSamplerType === 'horizontal'
+    || value.defaultSamplerType === 'bottle'
+    || value.defaultSamplerType === 'other'
+    ? value.defaultSamplerType
+    : undefined;
+  return {
+    ...base,
+    id: stringValue(value.id, crypto.randomUUID()),
+    parentId: optionalString(value.parentId),
+    runNumber: stringValue(value.runNumber, '1'),
+    timestamp: stringValue(value.timestamp, new Date().toISOString()),
+    flowPeriod,
+    verticals: verticals.length > 0 ? verticals : base.verticals,
+    leftBankCoefficient: stringValue(value.leftBankCoefficient, DEFAULT_SHORE_COEFFICIENT),
+    rightBankCoefficient: stringValue(value.rightBankCoefficient, DEFAULT_SHORE_COEFFICIENT),
+    waterLevel: optionalString(value.waterLevel),
+    location: optionalString(value.location),
+    meterFormula,
+    sedimentEnabled: typeof value.sedimentEnabled === 'boolean' ? value.sedimentEnabled : undefined,
+    defaultSamplerType,
+    defaultSampleVolume: optionalString(value.defaultSampleVolume),
+    totalDischarge: optionalString(value.totalDischarge),
+    totalArea: optionalString(value.totalArea),
+    meanVelocity: optionalString(value.meanVelocity),
+    surfaceWidth: optionalString(value.surfaceWidth),
+    maxDepth: optionalString(value.maxDepth),
+    maxVelocity: optionalString(value.maxVelocity),
+    totalSedimentDischarge: optionalString(value.totalSedimentDischarge),
+    meanSedimentConc: optionalString(value.meanSedimentConc),
+    startTime: optionalString(value.startTime),
+    endTime: optionalString(value.endTime),
+    duration: optionalString(value.duration),
+  };
+}
 
 /** 自定义跨端存储引擎：原生走 Capacitor Preferences，浏览器降级回 localStorage */
 const capacitorStorage = {
@@ -158,7 +290,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     let newRuns = [...s.runs];
     
     // 🚨 防呆机制：如果有未保存的修改，静默快照并建立亲子绑定关系
-    const hasMeasure = s.currentRun.verticals.some((v: any) => v.type === 'measure');
+    const hasMeasure = s.currentRun.verticals.some((v) => v.type === 'measure');
     if (s.isDirty && hasMeasure) {
       const snapshot = JSON.parse(JSON.stringify(s.currentRun));
       const existIdx = newRuns.findIndex(r => r.id === snapshot.id);
@@ -350,7 +482,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       nv.measurePoints = nv.measurePoints.map(mp => ({
         ...mp,
         relativeDepth: '0.5',
-        absoluteDepth: ((+nv.waterDepth || 0) * 0.5).toFixed(2),
+        absoluteDepth: calcAbs(nv.waterDepth, '0.5') ?? '',
       }));
     }
 
@@ -373,7 +505,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       nv.measurePoints = nv.measurePoints.map(mp => ({
         ...mp,
         relativeDepth: '0.5',
-        absoluteDepth: ((+nv.waterDepth || 0) * 0.5).toFixed(2),
+        absoluteDepth: calcAbs(nv.waterDepth, '0.5') ?? '',
       }));
     }
 
@@ -389,7 +521,10 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       if (!t) return { currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, ...updates } : v) } };
       if (t.type === 'measure' && updates.waterDepth !== undefined) {
         const depthVal = parseFloat(updates.waterDepth), oldDepth = parseFloat(t.waterDepth || '0');
-        if (isNaN(depthVal)) return { currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, ...updates } : v) } };
+        if (!Number.isFinite(depthVal)) {
+          const cleared = t.measurePoints.map((point) => ({ ...point, absoluteDepth: '' }));
+          return { currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, ...updates, measurePoints: cleared } : v) } };
+        }
         const fu: Partial<Vertical> = { ...updates };
         if (depthVal > 0 && depthVal < 0.2) {
           fu.measureMethod = 'one_point'; fu.deflectionCoefficient = '0.9';
@@ -401,7 +536,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
           fu.measurePoints = mergeByRelativeDepth(recoveryPts, t.measurePoints || []);
         }
         const sp = fu.measurePoints || t.measurePoints;
-        fu.measurePoints = sp.map(mp => { const rv = parseFloat(mp.relativeDepth || '0'); return isNaN(rv) ? mp : { ...mp, absoluteDepth: (depthVal * rv).toFixed(2) }; });
+        fu.measurePoints = sp.map((point) => ({ ...point, absoluteDepth: calcAbs(String(depthVal), point.relativeDepth) ?? '' }));
         return { currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, ...fu } : v) } };
       }
       return { currentRun: { ...s.currentRun, verticals: s.currentRun.verticals.map(v => v.id === vid ? { ...v, ...updates } : v) } };
@@ -410,7 +545,12 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   },
 
   deleteVertical: (vid) => { set(s => { const t = s.currentRun.verticals.find(v => v.id === vid); if (t?.type === 'edge') return s; const arr = s.currentRun.verticals.filter(v => v.id !== vid); let mi = 0; const rn = arr.map(v => { if (v.type === 'measure') { mi++; return { ...v, verticalNumber: String(mi) } } return v }); return { currentRun: { ...s.currentRun, verticals: rn }, expandedVerticalIds: new Set([...s.expandedVerticalIds].filter(id => id !== vid)), lastAddedVerticalId: null } }); get().recalculate(); },
-  toggleVerticalExpand: (vid) => set(s => { const n = new Set(s.expandedVerticalIds); n.has(vid) ? n.delete(vid) : n.add(vid); return { expandedVerticalIds: n } }),
+  toggleVerticalExpand: (vid) => set(s => {
+    const expandedIds = new Set(s.expandedVerticalIds);
+    if (expandedIds.has(vid)) expandedIds.delete(vid);
+    else expandedIds.add(vid);
+    return { expandedVerticalIds: expandedIds };
+  }),
 
   updateMeasurePoint: (vid, pid, updates) => {
     set(s => {
@@ -428,8 +568,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     const s = get(); const v = s.currentRun.verticals.find(x => x.id === vid); if (!v || v.type !== 'measure') return;
     const pts = createDefaultMeasurePoints(method, s.currentRun.flowPeriod);
     const mergedPts = mergeByRelativeDepth(pts, v.measurePoints || []);
-    const wd = +v.waterDepth || 0;
-    const withAbs = isNaN(wd) ? mergedPts : mergedPts.map(mp => { const r = +mp.relativeDepth; return isNaN(r) ? mp : { ...mp, absoluteDepth: (wd * r).toFixed(2) } });
+    const withAbs = mergedPts.map((point) => ({ ...point, absoluteDepth: calcAbs(v.waterDepth, point.relativeDepth) ?? '' }));
     set(s2 => ({ currentRun: { ...s2.currentRun, verticals: s2.currentRun.verticals.map(x => x.id === vid ? { ...x, measureMethod: method, measurePoints: withAbs } : x) } }));
     get().recalculate();
   },
@@ -446,7 +585,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
           const icePoints = mergeByRelativeDepth(iceTemplate, v.measurePoints || []);
           const iceWithAbs = icePoints.map(mp => ({
             ...mp,
-            absoluteDepth: ((+v.waterDepth || 0) * (+mp.relativeDepth || 0.5)).toFixed(2),
+            absoluteDepth: calcAbs(v.waterDepth, mp.relativeDepth) ?? '',
           }));
           return { ...v, deflectionCoefficient: '0.9', measureMethod: 'one_point' as MeasureMethod, measurePoints: iceWithAbs };
         } else {
@@ -705,31 +844,35 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   // 【重构】智能导入引擎：兼容老版全量库 & 新版单测次分享包
   importBackup: (backupData) => {
     try {
-      if (!backupData) return;
+      if (!isRecord(backupData)) return;
       const s = get();
       const currentRuns = [...s.runs];
       const seenLocations = new Set(currentRuns.map(r => r.location?.trim() || ''));
-      
-      let runsToImport: any[] = [];
+
+      const candidates: unknown[] = [];
 
       // 嗅探 1：如果是包含 runs 的全量旧备份
-      if (backupData.runs && Array.isArray(backupData.runs)) {
-        runsToImport = [...backupData.runs];
-        if (backupData.currentRun && backupData.currentRun.verticals) {
-          runsToImport.push(backupData.currentRun);
+      if (Array.isArray(backupData.runs)) {
+        candidates.push(...backupData.runs);
+        if (isRecord(backupData.currentRun) && Array.isArray(backupData.currentRun.verticals)) {
+          candidates.push(backupData.currentRun);
         }
-      } 
+      }
       // 嗅探 2：如果是同事分享的单测次包 (包含 verticals 数组)
-      else if (backupData.verticals && Array.isArray(backupData.verticals)) {
-        runsToImport.push(backupData);
+      else if (Array.isArray(backupData.verticals)) {
+        candidates.push(backupData);
       } else {
-        console.warn("无法识别的文件格式");
+        console.warn('无法识别的文件格式');
         return;
       }
 
+      const runsToImport = candidates
+        .map(normalizeImportedRun)
+        .filter((run): run is Run => run !== null);
+
       // 追加处理：颁发新身份证 + 智能避让重名
-      const appendedRuns = runsToImport.map((r: any) => {
-        let safeLoc = (r.location || '未知断面').trim();
+      const appendedRuns = runsToImport.map((run) => {
+        let safeLoc = (run.location || '未知断面').trim();
         if (seenLocations.has(safeLoc)) {
           let counter = 1;
           let testLoc = `${safeLoc}测次${counter}`;
@@ -742,7 +885,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
         seenLocations.add(safeLoc);
 
         // 绝对隔绝克隆病毒，变为全新测次
-        return { ...r, id: crypto.randomUUID(), location: safeLoc };
+        return { ...run, id: crypto.randomUUID(), location: safeLoc };
       });
 
       if (appendedRuns.length > 0) {
@@ -764,36 +907,32 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   /** 【断面模板引擎 v2】保存：深拷贝 → 数据清洗（流速/水深/冰厚置空） → 持久化 */
   saveTemplate: () => {
     const { currentRun } = get();
-    // 深拷贝所有垂线
-    const clonedVerticals: any[] = JSON.parse(JSON.stringify(currentRun.verticals));
     // 数据清洗：保留 id, startDistance, measureMethod, deflectionCoefficient, shoreCoefficient, type, name
     //            必须将 waterDepth, iceThickness, waterIceThickness, iceFlowerThickness 置空
     //            遍历 measurePoints，保留 id, relativeDepth, mode，将 velocity, absoluteDepth, n, t 置空
-    const cleanedVerticals = clonedVerticals.map((v: any) => {
-      const base: any = {
-        id: v.id,
-        type: v.type,
-        name: v.name,
-        startDistance: v.startDistance,
-        measureMethod: v.measureMethod,
-        deflectionCoefficient: v.deflectionCoefficient,
-        shoreCoefficient: v.shoreCoefficient,
-        waterDepth: v.waterDepth || '',          // 📐 仅保留几何水深
-        iceThickness: '',                        // 模板不记录冰厚
-        waterIceThickness: '',                   // 模板不记录水浸
-        iceFlowerThickness: '',                  // 模板不记录冰花
-        measurePoints: (v.measurePoints || []).map((mp: any) => ({
-          id: mp.id,
-          relativeDepth: mp.relativeDepth,
-          mode: mp.mode || 'direct',
-          velocity: '',
-          absoluteDepth: '',
-          n: '',
-          t: '',
-        })),
-      };
-      return base;
-    });
+    const cleanedVerticals: SectionTemplate['verticals'] = currentRun.verticals.map((vertical) => ({
+      id: vertical.id,
+      type: vertical.type,
+      name: vertical.name,
+      verticalNumber: vertical.verticalNumber,
+      startDistance: vertical.startDistance,
+      measureMethod: vertical.measureMethod,
+      deflectionCoefficient: vertical.deflectionCoefficient,
+      shoreCoefficient: vertical.shoreCoefficient,
+      waterDepth: vertical.waterDepth || '',
+      iceThickness: '',
+      waterIceThickness: '',
+      iceFlowerThickness: '',
+      measurePoints: vertical.measurePoints.map((point) => ({
+        id: point.id,
+        relativeDepth: point.relativeDepth,
+        mode: point.mode,
+        velocity: '',
+        absoluteDepth: '',
+        n: '',
+        t: '',
+      })),
+    }));
 
     // 提取左右岸系数（从第一条/最后一条 edge 垂线）
     const leftEdge = currentRun.verticals.find(v => v.type === 'edge' && v.name === '左水边');
@@ -825,23 +964,22 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
 
   /** 【载入模板 v2】使用 set 方法直接完整覆盖 currentRun，强制深拷贝触发 React 重渲染 */
   loadTemplate: (template: SectionTemplate) => {
-    // 深拷贝模板垂线，确保不与原对象共享引用
-    const clonedVerticals = JSON.parse(JSON.stringify(template.verticals));
     // 保留原有 waterfrontDepth / ice 等动态计算属性为空
-    const restoredVerticals: Vertical[] = clonedVerticals.map((v: any) => ({
-      ...v,
+    const restoredVerticals: Vertical[] = template.verticals.map((vertical) => ({
+      ...vertical,
       // 确保必填字段存在
-      verticalNumber: v.verticalNumber || '',
-      waterDepth: v.waterDepth || '',
-      measureMethod: v.measureMethod || 'one_point',
-      measurePoints: (v.measurePoints || []).map((mp: any) => ({
-        id: mp.id || crypto.randomUUID(),
-        relativeDepth: mp.relativeDepth,
-        mode: mp.mode || 'direct',
-        velocity: mp.velocity || '',
-        absoluteDepth: mp.absoluteDepth || '',
-        n: mp.n || '',
-        t: mp.t || '',
+      id: vertical.id || crypto.randomUUID(),
+      verticalNumber: vertical.verticalNumber || '',
+      waterDepth: vertical.waterDepth || '',
+      measureMethod: vertical.measureMethod || 'one_point',
+      measurePoints: vertical.measurePoints.map((point) => ({
+        id: point.id || crypto.randomUUID(),
+        relativeDepth: point.relativeDepth,
+        mode: point.mode || 'direct',
+        velocity: point.velocity || '',
+        absoluteDepth: point.absoluteDepth || '',
+        n: point.n || '',
+        t: point.t || '',
       })),
     }));
 

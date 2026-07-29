@@ -67,13 +67,13 @@ export default function PeriodToggle() {
     <div className="flex justify-center py-1">
       <div className="flex items-center p-0.5 rounded-lg bg-white/60 border border-white/80">
         <button onClick={() => handleToggle('open')}
-          className={`relative flex items-center gap-1 px-3 py-1 rounded-md text-xs transition-colors ${flowPeriod === 'open' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+          className={`relative flex min-h-11 items-center gap-1 px-3 py-1 rounded-md text-xs transition-colors ${flowPeriod === 'open' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}>
           {flowPeriod === 'open' && <motion.div layoutId="period-bg" className="absolute inset-0 bg-hydro-blue rounded-md" transition={{ duration: 0.2 }} />}
           <Sun className="relative w-3.5 h-3.5" />
           <span className="relative font-medium">畅流期</span>
         </button>
         <button onClick={() => handleToggle('ice')}
-          className={`relative flex items-center gap-1 px-3 py-1 rounded-md text-xs transition-colors ${flowPeriod === 'ice' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+          className={`relative flex min-h-11 items-center gap-1 px-3 py-1 rounded-md text-xs transition-colors ${flowPeriod === 'ice' ? 'text-white' : 'text-slate-500 hover:text-slate-700'}`}>
           {flowPeriod === 'ice' && <motion.div layoutId="period-bg" className="absolute inset-0 bg-hydro-blue rounded-md" transition={{ duration: 0.2 }} />}
           <Snowflake className="relative w-3.5 h-3.5" />
           <span className="relative font-medium">冰期</span>
@@ -81,7 +81,7 @@ export default function PeriodToggle() {
         {/* 齿轮：设置与元信息面板 */}
         <button
           onClick={toggleMetaPanel}
-          className="ml-1 p-1.5 rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-600/50 text-slate-500 dark:text-slate-400 hover:text-hydro-blue dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors shrink-0"
+          className="ml-1 flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-600/50 text-slate-500 dark:text-slate-400 hover:text-hydro-blue dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-gray-700 transition-colors shrink-0"
           title="设置与元信息"
         >
           <Settings className="w-3.5 h-3.5" />

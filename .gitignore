@@ -21,14 +21,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
-!dist.zip
-!dist/version.json
-!scripts/release-result.json
-scripts/.manifest-lock.json
 
-# COS keys and temp files
-scripts/cos.config.json
-.temp/
+# 屏蔽整个 AI 工具箱，保持工程纯净
+_AI_Tools_/
 
-# local env files
-.env
+# 本地源码目录清点辅助文件
+src/list.txt
+src/获取文件目录.bat

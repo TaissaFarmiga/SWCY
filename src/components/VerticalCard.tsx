@@ -118,7 +118,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
     >
       <div className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1.5 py-2">
         <button onClick={swapEdges}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100/60 dark:bg-amber-900/40 hover:bg-amber-200/60 dark:hover:bg-amber-800/40 transition-colors flex-shrink-0"
+          className="flex min-h-11 items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100/60 dark:bg-amber-900/40 hover:bg-amber-200/60 dark:hover:bg-amber-800/40 transition-colors flex-shrink-0"
           title="点击互换左右水边">
           <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{vertical.name}</span>
           <ArrowLeftRight className="w-2.5 h-2.5 text-amber-400" />
@@ -146,7 +146,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
       {isEndBank && (
         <>
           <button onClick={() => setShowResults(!showResults)}
-            className="w-full flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-r from-amber-50/30 dark:from-amber-900/20 to-transparent hover:from-amber-50/50 dark:hover:from-amber-900/30 transition-colors">
+            className="w-full min-h-11 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-r from-amber-50/30 dark:from-amber-900/20 to-transparent hover:from-amber-50/50 dark:hover:from-amber-900/30 transition-colors">
             <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
               <Gauge className="w-3 h-3" /><span>结束岸结果</span>
             </div>
@@ -176,11 +176,11 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   return confirming ? (
-    <button onClick={() => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); }}
-      className="p-0.5 rounded bg-red-500 dark:bg-red-600 text-white text-[10px] font-bold animate-pulse shrink-0">确认删除？</button>
+    <button aria-label="确认删除测速垂线" onClick={() => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); }}
+      className="min-h-11 min-w-11 rounded bg-red-500 dark:bg-red-600 text-white text-[10px] font-bold animate-pulse shrink-0">确认删除？</button>
   ) : (
-    <button onClick={(e) => { e.stopPropagation(); setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); }}
-      className="p-0.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400" title="删除此垂线（需二次确认）">
+    <button aria-label="删除测速垂线" onClick={(e) => { e.stopPropagation(); setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); }}
+      className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400" title="删除此垂线（需二次确认）">
       <Trash2 className="w-3.5 h-3.5" />
     </button>
   );
@@ -203,7 +203,7 @@ function MeasureMethodPopover({ value, methods, onChange }: { value: MeasureMeth
     <div className="relative w-[72px] shrink-0" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-1.5 py-0.5 text-[11px] rounded-md bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 dark:text-slate-300 outline-none cursor-pointer shrink-0 hover:border-hydro-blue/50 transition-colors"
+          className="w-full min-h-11 flex items-center justify-between px-1.5 py-0.5 text-[11px] rounded-md bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 dark:text-slate-300 outline-none cursor-pointer shrink-0 hover:border-hydro-blue/50 transition-colors"
       >
         <span className="font-medium">{METHOD_LABELS[value]}</span>
         <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -221,7 +221,7 @@ function MeasureMethodPopover({ value, methods, onChange }: { value: MeasureMeth
               <button
                 key={m}
                 onClick={() => { onChange(m); setOpen(false); }}
-                className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                className={`w-full min-h-11 text-left px-3 py-1.5 text-xs transition-colors ${
                   m === value
                     ? 'bg-blue-50/80 dark:bg-blue-900/40 text-hydro-blue dark:text-cyan-400 font-bold'
                     : 'text-slate-700 dark:text-slate-200 hover:bg-white/50 dark:hover:bg-gray-700/50'
@@ -328,8 +328,8 @@ function MeasureCard({ vertical, index }: Props) {
         </div>
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           <ConfirmDeleteButton onDelete={() => deleteVertical(vertical.id)} />
-          <button onClick={(e) => { e.stopPropagation(); insertVerticalAfter(vertical.id); }}
-            className="p-0.5 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400" title="在下方插入新垂线">
+          <button aria-label="在下方插入测速垂线" onClick={(e) => { e.stopPropagation(); insertVerticalAfter(vertical.id); }}
+            className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400" title="在下方插入新垂线">
             <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
