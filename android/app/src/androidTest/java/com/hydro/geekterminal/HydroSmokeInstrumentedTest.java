@@ -45,11 +45,41 @@ public class HydroSmokeInstrumentedTest {
             clickTestId("home-flow");
             waitForRoute(scenario, "flow-screen");
             assertViewportHasNoOverflow(scenario, 320);
+            assertCompactHeader(scenario, "flow-app-header");
+            clickTestId("flow-more");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-more-menu']\") !== null", "测流更多菜单未打开");
+            assertViewportHasNoOverflow(scenario, 320);
+            clickTestId("flow-more");
+            clickTestId("flow-add-vertical");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\") !== null", "测流垂线流速输入未渲染");
+            setReactInput(scenario, "flow-velocity-input", "12.345678");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\").value === '12.345678'", "长小数流速未写入直读输入框");
+            assertVelocityFieldFits(scenario);
+            assertViewportHasNoOverflow(scenario, 320);
             device.pressBack();
             waitForRoute(scenario, "home-screen");
 
+            device.executeShellCommand("pm revoke " + TARGET_PACKAGE + " android.permission.ACCESS_FINE_LOCATION");
+            device.executeShellCommand("pm revoke " + TARGET_PACKAGE + " android.permission.ACCESS_COARSE_LOCATION");
             clickTestId("home-leveling");
             waitForRoute(scenario, "leveling-screen");
+            assertViewportHasNoOverflow(scenario, 320);
+            assertCompactHeader(scenario, "leveling-app-header");
+            clickTestId("leveling-more");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-more-menu']\") !== null", "水准更多菜单未打开");
+            assertViewportHasNoOverflow(scenario, 320);
+            clickTestId("leveling-more");
+            clickTestId("leveling-add-station");
+            denyLocationPermissionIfShown(device);
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-location-fallback']\") !== null", "GPS 未授权后未提供无定位建站入口");
+            clickTestId("leveling-continue-without-location");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-station-card']\") !== null", "无定位建站后测站未渲染");
+            assertLevelingReadingsFit(scenario, false);
+            clickTestId("leveling-add-intermediate");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-intermediate-readings']\") !== null", "间视读数行未渲染");
+            assertLevelingReadingsFit(scenario, true);
+            clickTestId("leveling-start-return");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-return-state']\") !== null", "开始返测后未进入自动返测状态");
             assertViewportHasNoOverflow(scenario, 320);
             device.pressBack();
             waitForRoute(scenario, "home-screen");
@@ -162,6 +192,47 @@ public class HydroSmokeInstrumentedTest {
             String width = evaluateJavascript(scenario, "String(window.innerWidth)");
             assertEquals("模拟宽度必须精确进入 320px 验收档", expectedWidth.toString(), width);
         }
+    }
+
+    private static void assertCompactHeader(ActivityScenario<MainActivity> scenario, String testId) throws Exception {
+        waitForJavascript(
+            scenario,
+            "(() => {const e=document.querySelector(\"[data-testid='" + testId + "']\");if(!e)return false;const r=e.getBoundingClientRect();"
+                + "return r.height<=80&&r.width<=window.innerWidth&&e.scrollWidth<=e.clientWidth+2&&[...e.querySelectorAll('button')].every(b=>{const x=b.getBoundingClientRect();return x.width>=40&&x.height>=40;});})()",
+            "紧凑页头高度、宽度或触控面积不符合移动端要求：" + testId
+        );
+    }
+
+    private static void assertVelocityFieldFits(ActivityScenario<MainActivity> scenario) throws Exception {
+        String metrics = evaluateJavascript(
+            scenario,
+            "JSON.stringify((() => {const e=document.querySelector(\"[data-testid='flow-velocity-input']\");if(!e)return {found:false};const r=e.getBoundingClientRect();return {found:true,width:r.width,height:r.height,fontSize:getComputedStyle(e).fontSize,scrollWidth:e.scrollWidth,clientWidth:e.clientWidth,right:r.right,viewport:window.innerWidth};})())"
+        );
+        waitForJavascript(
+            scenario,
+            "(() => {const e=document.querySelector(\"[data-testid='flow-velocity-input']\");if(!e)return false;const r=e.getBoundingClientRect();"
+                + "return r.width>=64&&parseFloat(getComputedStyle(e).fontSize)>=16&&e.scrollWidth<=e.clientWidth+2&&r.right<=window.innerWidth+1;})()",
+            "流速输入框宽度、字体或可视区域不足：" + metrics
+        );
+    }
+
+    private static void assertLevelingReadingsFit(ActivityScenario<MainActivity> scenario, boolean expectIntermediate) throws Exception {
+        waitForJavascript(
+            scenario,
+            "(() => {const card=document.querySelector(\"[data-testid='leveling-station-card']\");if(!card)return false;"
+                + "const inputs=[...card.querySelectorAll('input')];const intermediate=document.querySelector(\"[data-testid='leveling-intermediate-readings']\");"
+                + "return inputs.length>=" + (expectIntermediate ? "13" : "10")
+                + "&&(!" + expectIntermediate + "||intermediate!==null)&&inputs.every(e=>{const r=e.getBoundingClientRect();return r.width>=48&&r.right<=window.innerWidth+1&&e.scrollWidth<=e.clientWidth+2;});})()",
+            "水准黑红面或间视读数在窄屏被截断"
+        );
+    }
+
+    private static void denyLocationPermissionIfShown(UiDevice device) {
+        androidx.test.uiautomator.UiObject2 deny = device.wait(
+            Until.findObject(By.res("com.android.permissioncontroller", "permission_deny_button")),
+            5_000
+        );
+        if (deny != null) deny.click();
     }
 
     private static void assertSystemBarInsetsApplied(ActivityScenario<MainActivity> scenario) {

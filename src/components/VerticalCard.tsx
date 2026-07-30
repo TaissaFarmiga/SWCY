@@ -4,7 +4,7 @@
  */
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef, memo } from 'react';
-import { ChevronDown, ChevronUp, Trash2, Plus, Target, Gauge, ArrowLeftRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Plus, Target, Gauge, ArrowLeftRight, MoreHorizontal } from 'lucide-react';
 import { Vertical, MeasureMethod, METHOD_LABELS, getAvailableMethods } from '../types';
 import MeasureRow from './MeasureRow';
 import { useHydroStore } from '../store/hydroStore';
@@ -86,7 +86,7 @@ function DistanceInput({
       <div className="relative w-full">
         <input type="text" inputMode="decimal" step="0.01" min="0" placeholder={placeholder || ''}
           value={value} onChange={(e) => onChange(e.target.value)}
-          className={`w-full min-w-[60px] px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
+          className={`min-h-10 w-full min-w-[72px] rounded-xl px-2 pr-8 text-center font-mono text-base font-bold shadow-inner outline-none dark:bg-gray-900/50 dark:text-slate-200 ${
             isDistanceError
               ? 'border border-red-500 text-red-600 bg-red-50 dark:bg-red-950/50 dark:text-red-400 dark:border-red-500'
               : isShallow
@@ -177,11 +177,11 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   return confirming ? (
     <button aria-label="确认删除测速垂线" onClick={() => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); }}
-      className="min-h-11 min-w-11 rounded bg-red-500 dark:bg-red-600 text-white text-[10px] font-bold animate-pulse shrink-0">确认删除？</button>
+      className="min-h-11 w-full rounded-full bg-red-500 px-3 text-xs font-bold text-white dark:bg-red-600">确认删除</button>
   ) : (
     <button aria-label="删除测速垂线" onClick={(e) => { e.stopPropagation(); setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); }}
-      className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400" title="删除此垂线（需二次确认）">
-      <Trash2 className="w-3.5 h-3.5" />
+      className="glass-menu-button w-full text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200" title="删除此垂线（需二次确认）">
+      <Trash2 className="h-4 w-4" />删除垂线
     </button>
   );
 }
@@ -248,6 +248,7 @@ function MeasureCard({ vertical, index }: Props) {
 
   const availableMethods = getAvailableMethods(flowPeriod);
   const [showResults, setShowResults] = useState(false);
+  const [showActions, setShowActions] = useState(false);
   const waterDepthNum = parseFloat(vertical.waterDepth || '0');
   const isShallow = waterDepthNum > 0 && waterDepthNum < 0.2;
   const isDistanceError = calcDistanceError(verticals, index);
@@ -259,33 +260,35 @@ function MeasureCard({ vertical, index }: Props) {
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="rounded-lg bg-white/70 dark:bg-gray-900/70 border border-white/80 dark:border-gray-700/80"
     >
-      <div className="w-full flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-1.5 py-2 border-b border-slate-100/50 dark:border-gray-700/50">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-slate-100/50 px-2 py-1.5 dark:border-gray-700/50">
         <div className="flex items-center justify-center w-5 h-5 rounded-md bg-hydro-blue text-white text-sm font-bold flex-shrink-0">
           {measureIndex}
-        </div>
-        <DistanceInput
-          value={vertical.startDistance}
-          onChange={(v) => updateVertical(vertical.id, { startDistance: v })}
-          isDistanceError={isDistanceError}
-          isShallow={isShallow}
-        />
-        <div className="flex-1 min-w-[90px] flex items-center gap-1">
-          <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap flex-shrink-0">水深</span>
-          <div className="relative w-full">
-            <input type="text" inputMode="decimal" step="0.001" min="0" placeholder=""
-              value={vertical.waterDepth} onChange={(e) => updateVertical(vertical.id, { waterDepth: e.target.value })}
-              className={`w-full min-w-[50px] px-1 py-1 pr-7 rounded-md shadow-inner bg-white/80 dark:bg-gray-900/50 dark:text-slate-200 text-center font-mono text-[11px] font-bold outline-none ${
-                isShallow ? 'border border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/50' : 'border border-slate-300 dark:border-gray-600 focus-within:border-hydro-blue'
-              }`}
-            />
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">m</span>
-          </div>
         </div>
         <MeasureMethodPopover
           value={vertical.measureMethod}
           methods={availableMethods}
           onChange={(m) => changeMeasureMethod(vertical.id, m)}
         />
+        <div className="col-span-2 grid grid-cols-2 gap-2">
+        <DistanceInput
+          value={vertical.startDistance}
+          onChange={(v) => updateVertical(vertical.id, { startDistance: v })}
+          isDistanceError={isDistanceError}
+          isShallow={isShallow}
+        />
+        <label className="flex min-w-0 items-center gap-1">
+          <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap flex-shrink-0">水深</span>
+          <div className="relative w-full">
+            <input type="text" inputMode="decimal" step="0.001" min="0" placeholder=""
+              value={vertical.waterDepth} onChange={(e) => updateVertical(vertical.id, { waterDepth: e.target.value })}
+              className={`min-h-10 w-full min-w-[72px] rounded-xl px-2 pr-8 text-center font-mono text-base font-bold shadow-inner outline-none dark:bg-gray-900/50 dark:text-slate-200 ${
+                isShallow ? 'border border-amber-400 text-amber-700 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/50' : 'border border-slate-300 dark:border-gray-600 focus-within:border-hydro-blue'
+              }`}
+            />
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-slate-500 pointer-events-none">m</span>
+          </div>
+        </label>
+        </div>
       </div>
 
       {/* 冰期参数探测层 (极致瘦身版) */}
@@ -316,22 +319,26 @@ function MeasureCard({ vertical, index }: Props) {
         ))}
       </div>
 
-      {/* 计算结果 — 整行点击展开/折叠，右侧放置操作按钮 */}
-      <div onClick={() => setShowResults(!showResults)}
-        className="w-full flex items-center justify-between cursor-pointer select-none py-2 px-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors">
-        <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between gap-1 rounded-b-xl bg-gray-50 px-2 py-1 dark:bg-gray-800/50">
+        <button type="button" onClick={() => setShowResults(!showResults)} aria-expanded={showResults} className="flex min-h-10 min-w-0 flex-1 items-center gap-1 rounded-full px-2 text-left hover:bg-white/75 dark:hover:bg-gray-700/70">
           <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <Gauge className="w-3 h-3" /><span>计算结果</span>
             {isShallow && <span className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 text-[10px]">浅水区</span>}
           </div>
           {showResults ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
-        </div>
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <ConfirmDeleteButton onDelete={() => deleteVertical(vertical.id)} />
-          <button aria-label="在下方插入测速垂线" onClick={(e) => { e.stopPropagation(); insertVerticalAfter(vertical.id); }}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400" title="在下方插入新垂线">
-            <Plus className="w-3.5 h-3.5" />
+        </button>
+        <div className="relative shrink-0">
+          <button type="button" aria-label="垂线更多操作" aria-expanded={showActions} onClick={() => setShowActions((value) => !value)} className="glass-icon-button">
+            <MoreHorizontal className="h-4 w-4" />
           </button>
+          <AnimatePresence>
+            {showActions && (
+              <motion.div initial={{ opacity: 0, scale: 0.96, y: 4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 4 }} className="absolute bottom-[calc(100%+0.25rem)] right-0 z-30 flex min-w-32 flex-col gap-1 rounded-2xl border border-white/75 bg-white/90 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/90">
+                <button type="button" onClick={() => { insertVerticalAfter(vertical.id); setShowActions(false); }} className="glass-menu-button"><Plus className="h-4 w-4" />添加垂线</button>
+                <ConfirmDeleteButton onDelete={() => deleteVertical(vertical.id)} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -339,7 +346,7 @@ function MeasureCard({ vertical, index }: Props) {
         {showResults && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.15 }} style={{ willChange: 'height, opacity' }}
             className="overflow-hidden bg-blue-50/20 dark:bg-blue-950/20 px-1.5 py-1">
-            <div className="grid grid-cols-4 divide-x divide-blue-100/60 dark:divide-blue-800/40 rounded-md bg-white/60 dark:bg-gray-800/60 border border-blue-100/80 dark:border-blue-800/50 shadow-sm overflow-hidden">
+            <div className="grid grid-cols-2 divide-x divide-y divide-blue-100/60 overflow-hidden rounded-xl border border-blue-100/80 bg-white/60 shadow-sm dark:divide-blue-800/40 dark:border-blue-800/50 dark:bg-gray-800/60 min-[390px]:grid-cols-4 min-[390px]:divide-y-0">
               <ResultTile label="垂线流速" value={vertical.correctedVelocity} unit="m/s" />
               <ResultTile label="部分流速" value={vertical.partialMeanVelocity} unit="m/s" highlight />
               <ResultTile label="部分面积" value={formatAreaUI(vertical.partialArea)} unit="m²" />

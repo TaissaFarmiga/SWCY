@@ -4,7 +4,7 @@
  */
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { Sun, Moon, Download, Upload, Activity, X, BookmarkPlus, Layers, Trash2, ChevronLeft } from 'lucide-react';
+import { Sun, Moon, Download, Upload, Activity, X, BookmarkPlus, Layers, Trash2, ChevronLeft, MoreHorizontal, FileSpreadsheet, History } from 'lucide-react';
 import Dashboard from './Dashboard';
 import PeriodToggle from './PeriodToggle';
 import HydroTable from './HydroTable';
@@ -146,7 +146,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   const templates = useHydroStore((s) => s.templates);
 
   const sortedRuns = useMemo(
-    () => runs.slice().sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(0, 10),
+    () => runs.slice().sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 10),
     [runs]
   );
 
@@ -163,6 +163,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   const [toast, setToast] = useState({ show: false, message: '' });
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const importMenuRef = useRef<HTMLDivElement>(null);
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const [showCFDSheet, setShowCFDSheet] = useState(false);
@@ -196,14 +197,21 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   );
 
   useEffect(() => {
+    if (!isActive) return;
     recalculate(false);
-  }, [recalculate]);
+  }, [isActive, recalculate]);
 
   /* ── 由 App 集中接管 Android 返回；此处仅消费当前业务弹层 ── */
   useEffect(() => {
+    if (!isActive) return undefined;
     const handleAppBack = (event: Event) => {
       if (showCFDSheet) {
         setShowCFDSheet(false);
+        event.preventDefault();
+        return;
+      }
+      if (showMore) {
+        setShowMore(false);
         event.preventDefault();
         return;
       }
@@ -220,7 +228,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
     };
     window.addEventListener('hydro-app-back', handleAppBack);
     return () => window.removeEventListener('hydro-app-back', handleAppBack);
-  }, [showCFDSheet, showImportMenu, showTemplateMenu]);
+  }, [isActive, showCFDSheet, showImportMenu, showMore, showTemplateMenu]);
 
   /* 点击外部关闭导入菜单 */
   useEffect(() => {
@@ -277,7 +285,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
   /* ── 导入外部 JSON ── */
   const handleImportClick = () => {
-    document.getElementById('hydro-import-input')?.click();
+    document.getElementById('hydro-import-input-compact')?.click();
   };
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,8 +328,39 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
       </div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10">
-       {/* 标题栏 — 随屏滚动 */}
-        <header className="app-safe-header relative z-20 bg-[#F2F2F7] dark:bg-gray-950 border-b border-slate-200/60 dark:border-gray-800/60">
+        <header data-testid="flow-app-header" className="app-safe-header relative z-30 border-b border-white/70 bg-[#F2F2F7]/82 backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-950/82">
+          <div className="flex min-h-12 items-center gap-1 px-2 py-1">
+            <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button"><ChevronLeft className="h-5 w-5" /></button>
+            <div className="min-w-0 flex-1 px-1"><h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">水文测验</h1><p className="truncate text-xs text-slate-500 dark:text-slate-400">GB 50179-2015 · {measureCount} 条垂线</p></div>
+            <button data-testid="flow-result" type="button" onClick={() => setShowCFDSheet(true)} aria-label="断面成果" title="断面成果" className="glass-icon-button"><Activity className="h-4 w-4" /></button>
+            <button data-testid="flow-more" type="button" onClick={() => setShowMore((value) => !value)} aria-label="更多功能" title="更多功能" aria-expanded={showMore} className="glass-icon-button"><MoreHorizontal className="h-5 w-5" /></button>
+          </div>
+        </header>
+        <input id="hydro-import-input-compact" type="file" accept=".json" onChange={handleImportFile} className="sr-only" />
+
+        <AnimatePresence>
+          {showMore && (
+            <motion.section data-testid="flow-more-menu" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="relative z-40 mx-2 mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/75 bg-white/84 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/84 min-[390px]:grid-cols-3">
+              <button type="button" onClick={() => { handleSaveTemplate(); setShowMore(false); }} className="glass-menu-button"><BookmarkPlus className="h-4 w-4" />存为模板</button>
+              <div ref={templateMenuRef} className="relative">
+                <button type="button" onClick={() => setShowTemplateMenu((value) => !value)} className="glass-menu-button w-full"><Layers className="h-4 w-4" />载入模板</button>
+                <AnimatePresence>
+                  {showTemplateMenu && <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 top-[calc(100%+0.25rem)] z-50 max-h-64 w-64 overflow-y-auto rounded-2xl border border-white/75 bg-white/95 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/95">
+                    {templates.length === 0 ? <p className="px-3 py-3 text-xs text-slate-500">暂无断面模板</p> : templates.map((tpl) => <div key={tpl.id} className="flex items-center gap-1"><button type="button" onClick={() => { handleLoadTemplate(tpl); setShowMore(false); }} className="min-h-11 min-w-0 flex-1 truncate px-2 text-left text-xs text-slate-700 dark:text-slate-200">{tpl.name}</button><button type="button" aria-label={`删除模板 ${tpl.name}`} onClick={() => handleDeleteTemplate(tpl.id)} className="glass-icon-button"><Trash2 className="h-4 w-4" /></button></div>)}
+                  </motion.div>}
+                </AnimatePresence>
+              </div>
+              <button type="button" onClick={() => { handleImportClick(); setShowMore(false); }} className="glass-menu-button"><Download className="h-4 w-4" />导入备份</button>
+              <button type="button" onClick={() => { useHydroStore.getState().exportCurrentRunJSON(); setShowMore(false); }} className="glass-menu-button"><Upload className="h-4 w-4" />导出 JSON</button>
+              <button type="button" onClick={() => { exportData(); setShowMore(false); }} className="glass-menu-button"><FileSpreadsheet className="h-4 w-4" />导出 Excel</button>
+              <button type="button" onClick={() => { toggleHistoryPanel(); setShowMore(false); }} className="glass-menu-button"><History className="h-4 w-4" />历史测次</button>
+              <button type="button" onClick={() => { setDarkMode(!darkMode); setShowMore(false); }} className="glass-menu-button">{darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}{darkMode ? '浅色模式' : '深色模式'}</button>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+       {/* Legacy action header retained only for source compatibility. */}
+        <header className="hidden">
           <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
             <div className="flex shrink-0 items-center">
               <button
@@ -351,7 +390,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
               </button>
 
               {/* 载入模板 — 断面模板悬浮菜单 */}
-              <div ref={templateMenuRef} className="md:relative">
+              <div className="md:relative">
                 <button
                   onClick={() => setShowTemplateMenu(!showTemplateMenu)}
                   className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/30 transition-colors"
@@ -416,7 +455,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
               <div className="w-px h-5 bg-slate-300/50 dark:bg-gray-600/50 mx-0.5 shrink-0" />
 
               {/* 导入备份 */}
-              <div className="md:relative" ref={importMenuRef}>
+              <div className="md:relative">
                 <button
                   onClick={() => setShowImportMenu(!showImportMenu)}
                   className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
@@ -521,28 +560,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
         <div className="flex items-center justify-center gap-2 px-2">
           <PeriodToggle />
-          {/* V-Field 成果图按钮 — 粒子微光动效 */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowCFDSheet(true)}
-            className="relative flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold
-              overflow-hidden
-              bg-gradient-to-r from-cyan-600/80 to-blue-600/80
-              border border-cyan-400/40
-              text-white
-              shadow-lg shadow-cyan-500/20
-              hover:shadow-cyan-500/40
-              transition-shadow duration-300"
-          >
-            {/* 粒子微光背景 */}
-            <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-            <Activity className="relative w-3.5 h-3.5" />
-            <span className="relative">V-Field</span>
-            {/* 脉冲光点 */}
-            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-cyan-300 animate-ping" />
-            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-cyan-200" />
-          </motion.button>
+          <button type="button" onClick={() => setShowCFDSheet(true)} className="glass-pill-button"><Activity className="h-4 w-4" />断面成果</button>
         </div>
         <HydroTable />
 
@@ -580,7 +598,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
                   shadow-2xl shadow-black/60
                   overflow-hidden
                   flex flex-col"
-                style={{ height: `${sheetHeight}vh` }}
+                style={{ height: `${sheetHeight}vh`, paddingBottom: 'var(--app-safe-bottom)' }}
               >
                 {/* 抽屉头部 — 合并小白条和标题，全区域可拖拽防误触 */}
                 <div

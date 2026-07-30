@@ -2,7 +2,7 @@
 
 import type { InstrumentSnapshot, RecordLifecycleStatus, RuleProfileSnapshot } from './governance';
 
-export const LEVELING_SCHEMA_VERSION = 3;
+export const LEVELING_SCHEMA_VERSION = 4;
 
 export type LevelingGrade = '3' | '4' | 'out';
 export type StaffConstant = 4687 | 4787;
@@ -73,6 +73,10 @@ export interface LevelingStation {
   timestamp: number;
   lat?: number;
   lng?: number;
+  /** Position metadata is observational only; coordinate values remain top-level for legacy exports. */
+  locationAccuracyM?: number;
+  locationCapturedAt?: string;
+  locationSource?: 'native-gps' | 'browser-gps';
 }
 
 export interface KnownPoint {
@@ -138,7 +142,11 @@ export interface LevelingRoute {
   name: string;
   grade: LevelingGrade;
   routeType: LevelingRouteType;
+  /** Current measuring leg. New stations inherit this value. Kept for legacy backup compatibility. */
   direction: SurveyDirection;
+  /** Last forward station before the return leg. Undefined until operator starts return measurement. */
+  returnStartStationId?: string;
+  returnStartedAt?: string;
   completionStatus: LevelingCompletionStatus;
   revision: number;
   instrument: string;

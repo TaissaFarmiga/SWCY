@@ -63,10 +63,6 @@ function normalizeGrade(value: unknown): LevelingGrade {
   return value === '3' || value === '4' || value === 'out' ? value : '4';
 }
 
-function normalizeDirection(value: unknown, fallback: SurveyDirection = 'forward'): SurveyDirection {
-  return value === 'return' || value === 'forward' ? value : fallback;
-}
-
 export function createEmptyLevelingReadings(): LevelingReadings {
   return {
     backPoint: '',
@@ -85,13 +81,20 @@ export function createEmptyLevelingReadings(): LevelingReadings {
   };
 }
 
+export interface NewStationLocation {
+  lat: number;
+  lng: number;
+  accuracyM?: number;
+  capturedAt?: string;
+  source?: 'native-gps' | 'browser-gps';
+}
+
 export function createEmptyLevelingStation(
   stationNumber: number,
   direction: SurveyDirection,
-  lat?: number,
-  lng?: number,
+  location?: NewStationLocation,
 ): LevelingStation {
-  const coordinates = { lat, lng };
+  const coordinates = { lat: location?.lat, lng: location?.lng };
   return {
     id: generateUUID(),
     stationNumber,
@@ -99,7 +102,18 @@ export function createEmptyLevelingStation(
     readings: createEmptyLevelingReadings(),
     result: createEmptyStationResult(),
     timestamp: Date.now(),
-    ...(hasValidCoordinates(coordinates) ? coordinates : {}),
+    ...(hasValidCoordinates(coordinates)
+      ? {
+          ...coordinates,
+          ...(typeof location?.accuracyM === 'number' && Number.isFinite(location.accuracyM) && location.accuracyM >= 0
+            ? { locationAccuracyM: location.accuracyM }
+            : {}),
+          ...(typeof location?.capturedAt === 'string' && Number.isFinite(Date.parse(location.capturedAt))
+            ? { locationCapturedAt: new Date(location.capturedAt).toISOString() }
+            : {}),
+          ...(location?.source ? { locationSource: location.source } : {}),
+        }
+      : {}),
   };
 }
 
@@ -172,24 +186,67 @@ function normalizeReadings(value: unknown): LevelingReadings {
   };
 }
 
-function inferLegacyDirection(readings: LevelingReadings): SurveyDirection {
-  return readings.backPoint.includes('返') || readings.forePoint.includes('返') ? 'return' : 'forward';
+function explicitDirection(value: unknown): SurveyDirection | null {
+  return value === 'forward' || value === 'return' ? value : null;
 }
 
-function normalizeStation(value: unknown, index: number, routeDirection: SurveyDirection): LevelingStation {
+/** Legacy only. New records never infer direction from point names. */
+function inferLegacyDirection(readings: LevelingReadings): SurveyDirection | null {
+  return /^\s*返/.test(readings.backPoint) || /^\s*返/.test(readings.forePoint) ? 'return' : null;
+}
+
+function normalizeStation(value: unknown, index: number, direction: SurveyDirection): LevelingStation {
   const source = isRecord(value) ? value : {};
   const readings = normalizeReadings(source.readings);
-  const legacyDirection = inferLegacyDirection(readings);
   const coordinates = { lat: asFiniteNumber(source.lat) ?? undefined, lng: asFiniteNumber(source.lng) ?? undefined };
   return {
     id: asString(source.id) || generateUUID(),
     stationNumber: index + 1,
-    direction: normalizeDirection(source.direction, legacyDirection || routeDirection),
+    direction,
     readings,
     result: createEmptyStationResult(),
     timestamp: asTimestamp(source.timestamp),
-    ...(hasValidCoordinates(coordinates) ? coordinates : {}),
+    ...(hasValidCoordinates(coordinates)
+      ? {
+          ...coordinates,
+          ...(asFiniteNumber(source.locationAccuracyM) !== null && asFiniteNumber(source.locationAccuracyM)! >= 0
+            ? { locationAccuracyM: asFiniteNumber(source.locationAccuracyM)! }
+            : {}),
+          ...(typeof source.locationCapturedAt === 'string' && Number.isFinite(Date.parse(source.locationCapturedAt))
+            ? { locationCapturedAt: new Date(source.locationCapturedAt).toISOString() }
+            : {}),
+          ...(source.locationSource === 'native-gps' || source.locationSource === 'browser-gps'
+            ? { locationSource: source.locationSource }
+            : {}),
+        }
+      : {}),
   };
+}
+
+function normalizeStations(value: unknown, routeDirection: SurveyDirection): LevelingStation[] {
+  if (!Array.isArray(value)) return [];
+  const sources = value.map((station) => isRecord(station) ? station : {});
+  // Legacy routes may retain a route-level "return" flag while only later
+  // stations have the old name marker. Preserve the forward leg before it.
+  const legacyReturnIndex = sources.findIndex((source) => (
+    !explicitDirection(source.direction) && inferLegacyDirection(normalizeReadings(source.readings)) === 'return'
+  ));
+  let inheritedDirection: SurveyDirection = legacyReturnIndex >= 0 ? 'forward' : routeDirection;
+  let legacyReturnStarted = false;
+  return sources.map((source, index) => {
+    const readings = normalizeReadings(source.readings);
+    const explicit = explicitDirection(source.direction);
+    const legacy = explicit ? null : inferLegacyDirection(readings);
+    if (legacy === 'return') legacyReturnStarted = true;
+    const direction = explicit ?? (legacyReturnStarted ? 'return' : inheritedDirection);
+    inheritedDirection = direction;
+    return normalizeStation(source, index, direction);
+  });
+}
+
+function deriveReturnStartStationId(stations: LevelingStation[]): string | undefined {
+  const firstReturnIndex = stations.findIndex((station) => station.direction === 'return');
+  return firstReturnIndex > 0 ? stations[firstReturnIndex - 1]?.id : undefined;
 }
 
 function normalizeKnownPoint(value: unknown): KnownPoint {
@@ -230,10 +287,9 @@ export function normalizeLevelingRoute(value: unknown): LevelingRoute {
   const source = isRecord(value) ? value : {};
   const grade = normalizeGrade(source.grade);
   const base = createEmptyLevelingRoute(grade);
-  const direction = normalizeDirection(source.direction);
-  const stations = Array.isArray(source.stations)
-    ? source.stations.map((station, index) => normalizeStation(station, index, direction))
-    : [];
+  const persistedDirection = explicitDirection(source.direction);
+  const stations = normalizeStations(source.stations, persistedDirection ?? 'forward');
+  const direction = persistedDirection ?? stations[stations.length - 1]?.direction ?? 'forward';
   const knownPoints = Array.isArray(source.knownPoints)
     ? source.knownPoints.map(normalizeKnownPoint)
     : base.knownPoints;
@@ -247,6 +303,9 @@ export function normalizeLevelingRoute(value: unknown): LevelingRoute {
     grade,
     routeType: normalizeRouteType(source.routeType, inferredType),
     direction,
+    returnStartStationId: asOptionalString(source.returnStartStationId)
+      ?? deriveReturnStartStationId(stations),
+    returnStartedAt: asOptionalString(source.returnStartedAt),
     completionStatus: normalizeCompletionStatus(source.completionStatus),
     revision: typeof source.revision === 'number' && Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
     instrument: asString(source.instrument),
@@ -357,7 +416,9 @@ export interface LevelingState {
   addKnownPoint: (insertAfterId?: string) => void;
   updateKnownPoint: (id: string, field: keyof KnownPoint, value: string | number | null) => void;
   removeKnownPoint: (id: string) => void;
-  addStation: (insertAfterId?: string, lat?: number, lng?: number) => void;
+  /** All UI entry points call this one method; current route direction controls appended stations. */
+  addStation: (insertAfterId?: string, location?: NewStationLocation) => void;
+  beginReturnLeg: () => void;
   setStationDirection: (stationId: string, direction: SurveyDirection) => void;
   updateStationReading: (stationId: string, updates: Partial<LevelingReadings>) => void;
   deleteStation: (stationId: string) => void;
@@ -448,11 +509,30 @@ export const useLevelingStore = create<LevelingState>()(
           isDirty: true,
         };
       }),
-      addStation: (insertAfterId, lat, lng) => set((state) => {
+      beginReturnLeg: () => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        const lastForward = [...editable.stations].reverse().find((station) => station.direction === 'forward');
+        if (!lastForward) return state;
+        const now = new Date().toISOString();
+        return {
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            routeType: 'round-trip',
+            direction: 'return',
+            returnStartStationId: editable.returnStartStationId ?? lastForward.id,
+            returnStartedAt: editable.returnStartedAt ?? now,
+            updatedAt: now,
+          }),
+          isDirty: true,
+        };
+      }),
+      addStation: (insertAfterId, location) => set((state) => {
         const editable = prepareEditableRoute(state.currentRoute);
         const stations = [...editable.stations];
-        const station = createEmptyLevelingStation(0, editable.direction, lat, lng);
         const insertIndex = insertAfterId ? stations.findIndex((item) => item.id === insertAfterId) : -1;
+        // Historical insertion inherits its surrounding leg. Footer creation appends using current leg.
+        const direction = insertIndex >= 0 ? stations[insertIndex].direction : editable.direction;
+        const station = createEmptyLevelingStation(0, direction, location);
         if (insertIndex >= 0) {
           station.readings.backPoint = stations[insertIndex].readings.forePoint;
           stations.splice(insertIndex + 1, 0, station);
@@ -491,12 +571,16 @@ export const useLevelingStore = create<LevelingState>()(
       }),
       deleteStation: (stationId) => set((state) => {
         const editable = prepareEditableRoute(state.currentRoute);
+        const stations = editable.stations
+          .filter((station) => station.id !== stationId)
+          .map((station, index) => ({ ...station, stationNumber: index + 1 }));
         return {
           currentRoute: recalculateLevelingRoute({
             ...editable,
-            stations: editable.stations
-              .filter((station) => station.id !== stationId)
-              .map((station, index) => ({ ...station, stationNumber: index + 1 })),
+            stations,
+            returnStartStationId: editable.returnStartStationId === stationId
+              ? deriveReturnStartStationId(stations)
+              : editable.returnStartStationId,
           }),
           isDirty: true,
         };

@@ -9,7 +9,16 @@ import {
   RotateCcw,
   Smartphone,
 } from 'lucide-react';
-import { applyDeadZone, boundedBubblePosition, lowPassTilt, rotateForScreen } from '../../lib/spiritLevel';
+import {
+  applyDeadZone,
+  boundedBubblePosition,
+  lowPassTilt,
+  medianTilt,
+  nextCenteredState,
+  rotateForScreen,
+  type TiltVector,
+} from '../../lib/spiritLevel';
+import { triggerCenterFeedback } from '../../lib/mobileFeedback';
 
 type PermissionState = 'idle' | 'requesting' | 'active' | 'denied' | 'unsupported' | 'no-data' | 'error';
 type PermissionResult = 'granted' | 'denied';
@@ -26,6 +35,10 @@ interface TiltReading {
   source: SensorSource;
 }
 
+interface TimedTiltSample extends TiltVector {
+  receivedAt: number;
+}
+
 interface SensorCapabilities {
   orientation: boolean;
   motion: boolean;
@@ -33,8 +46,14 @@ interface SensorCapabilities {
 
 const RENDER_INTERVAL_MS = 50;
 const NO_DATA_TIMEOUT_MS = 3000;
-const PERFECT_LIMIT_DEGREES = 0.3;
-const WARNING_LIMIT_DEGREES = 1.5;
+const CENTER_ENTER_LIMIT_DEGREES = 0.5;
+const CENTER_EXIT_LIMIT_DEGREES = 0.7;
+const WARNING_LIMIT_DEGREES = 2;
+const DISPLAY_DEAD_ZONE_DEGREES = 0.1;
+const SENSOR_FILTER_ALPHA = 0.16;
+const MEDIAN_SAMPLE_COUNT = 7;
+const CALIBRATION_SAMPLE_WINDOW_MS = 800;
+const CENTER_FEEDBACK_COOLDOWN_MS = 900;
 
 function getCapabilities(): SensorCapabilities {
   return {
@@ -87,19 +106,22 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
   const [enabledSensors, setEnabledSensors] = useState<SensorCapabilities>({ orientation: false, motion: false });
   const [reading, setReading] = useState<TiltReading | null>(null);
   const [isCalibrated, setIsCalibrated] = useState(false);
+  const [isCentered, setIsCentered] = useState(false);
 
   const screenAngleRef = useRef(0);
   const filteredRef = useRef<{ x: number; y: number } | null>(null);
   const latestRef = useRef<TiltReading | null>(null);
+  const sampleBufferRef = useRef<TimedTiltSample[]>([]);
   const calibrationRef = useRef({ x: 0, y: 0 });
   const lastOrientationAtRef = useRef(0);
+  const lastCenterFeedbackAtRef = useRef(0);
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noDataTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const centeredRef = useRef(false);
   const mountedRef = useRef(true);
 
-  const bubbleX = useSpring(0, { damping: 26, stiffness: 210, mass: 0.5 });
-  const bubbleY = useSpring(0, { damping: 26, stiffness: 210, mass: 0.5 });
+  const bubbleX = useSpring(0, { damping: 32, stiffness: 180, mass: 0.55 });
+  const bubbleY = useSpring(0, { damping: 32, stiffness: 180, mass: 0.55 });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -139,7 +161,11 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
       setEnabledSensors(enabled);
       filteredRef.current = null;
       latestRef.current = null;
+      sampleBufferRef.current = [];
+      centeredRef.current = false;
+      lastCenterFeedbackAtRef.current = 0;
       setReading(null);
+      setIsCentered(false);
       setPermissionState('active');
     } catch (error) {
       console.error('[SpiritLevel] 传感器权限请求失败', error);
@@ -155,8 +181,11 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
       screenAngleRef.current = getScreenAngle();
       filteredRef.current = null;
       latestRef.current = null;
+      sampleBufferRef.current = [];
       calibrationRef.current = { x: 0, y: 0 };
+      centeredRef.current = false;
       setIsCalibrated(false);
+      setIsCentered(false);
       setReading(null);
       bubbleX.set(0);
       bubbleY.set(0);
@@ -167,8 +196,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
       const latest = latestRef.current;
       if (!latest) return;
       const calibrated = {
-        x: applyDeadZone(latest.x - calibrationRef.current.x),
-        y: applyDeadZone(latest.y - calibrationRef.current.y),
+        x: applyDeadZone(latest.x - calibrationRef.current.x, DISPLAY_DEAD_ZONE_DEGREES),
+        y: applyDeadZone(latest.y - calibrationRef.current.y, DISPLAY_DEAD_ZONE_DEGREES),
         source: latest.source,
       };
       const bubble = boundedBubblePosition(calibrated.x, calibrated.y);
@@ -179,12 +208,16 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
     const acceptTilt = (x: number, y: number, source: SensorSource) => {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      const receivedAt = Date.now();
       if (noDataTimerRef.current) {
         clearTimeout(noDataTimerRef.current);
         noDataTimerRef.current = null;
       }
+      sampleBufferRef.current = [...sampleBufferRef.current, { x, y, receivedAt }]
+        .filter((sample) => receivedAt - sample.receivedAt <= CALIBRATION_SAMPLE_WINDOW_MS);
+      const medianSample = medianTilt(sampleBufferRef.current.slice(-MEDIAN_SAMPLE_COUNT)) ?? { x, y };
       const previous = filteredRef.current;
-      const filtered = lowPassTilt(previous, { x, y });
+      const filtered = lowPassTilt(previous, medianSample, SENSOR_FILTER_ALPHA);
       filteredRef.current = filtered;
       latestRef.current = { ...filtered, source };
       if (!renderTimerRef.current) {
@@ -225,6 +258,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
       if (noDataTimerRef.current) clearTimeout(noDataTimerRef.current);
       renderTimerRef.current = null;
       noDataTimerRef.current = null;
+      sampleBufferRef.current = [];
+      centeredRef.current = false;
       bubbleX.set(0);
       bubbleY.set(0);
     };
@@ -233,8 +268,13 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
   const calibrate = useCallback(() => {
     const latest = latestRef.current;
     if (!latest) return;
-    calibrationRef.current = { x: latest.x, y: latest.y };
+    const cutoff = Date.now() - CALIBRATION_SAMPLE_WINDOW_MS;
+    const stableSamples = sampleBufferRef.current.filter((sample) => sample.receivedAt >= cutoff);
+    const reference = medianTilt(stableSamples) ?? latest;
+    calibrationRef.current = { x: reference.x, y: reference.y };
+    centeredRef.current = true;
     setIsCalibrated(true);
+    setIsCentered(true);
     bubbleX.set(0);
     bubbleY.set(0);
     setReading({ x: 0, y: 0, source: latest.source });
@@ -242,7 +282,9 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
   const resetCalibration = useCallback(() => {
     calibrationRef.current = { x: 0, y: 0 };
+    centeredRef.current = false;
     setIsCalibrated(false);
+    setIsCentered(false);
     const latest = latestRef.current;
     if (latest) setReading(latest);
   }, []);
@@ -250,15 +292,24 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
   const deviation = reading ? Math.hypot(reading.x, reading.y) : null;
   const levelState = deviation === null
     ? '等待传感器'
-    : deviation <= PERFECT_LIMIT_DEGREES
+    : isCentered
       ? '已对中'
       : deviation <= WARNING_LIMIT_DEGREES
         ? '接近垂直'
         : '偏离垂直';
 
   useEffect(() => {
-    const centered = deviation !== null && deviation <= PERFECT_LIMIT_DEGREES;
-    if (centered && !centeredRef.current && navigator.vibrate) navigator.vibrate(10);
+    const centered = nextCenteredState(
+      deviation,
+      centeredRef.current,
+      CENTER_ENTER_LIMIT_DEGREES,
+      CENTER_EXIT_LIMIT_DEGREES,
+    );
+    if (centered !== centeredRef.current) setIsCentered(centered);
+    if (centered && !centeredRef.current && Date.now() - lastCenterFeedbackAtRef.current >= CENTER_FEEDBACK_COOLDOWN_MS) {
+      lastCenterFeedbackAtRef.current = Date.now();
+      void triggerCenterFeedback();
+    }
     centeredRef.current = centered;
   }, [deviation]);
 
@@ -314,8 +365,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
     );
   }
 
-  const perfect = deviation !== null && deviation <= PERFECT_LIMIT_DEGREES;
-  const warning = deviation !== null && deviation > PERFECT_LIMIT_DEGREES && deviation <= WARNING_LIMIT_DEGREES;
+  const perfect = deviation !== null && isCentered;
+  const warning = deviation !== null && !isCentered && deviation <= WARNING_LIMIT_DEGREES;
   const statusColor = perfect
     ? 'bg-emerald-500 shadow-emerald-500/50'
     : warning
@@ -388,7 +439,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         </button>
       </section>
       <p className="mt-4 max-w-[280px] text-center text-[10px] leading-5 text-slate-400">
-        将手机竖直贴紧水准尺后校准。读数经过低通滤波和 0.05° 死区处理；仅作现场辅助，不替代仪器检定。
+        将手机竖直贴紧水准尺后校准。读数采用中值与低通滤波、0.10° 死区；0.50° 入中心、0.70° 出中心。仅作现场辅助，不替代仪器检定。
       </p>
     </main>
   );

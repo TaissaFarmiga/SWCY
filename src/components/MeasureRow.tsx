@@ -163,25 +163,27 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             <span className="text-sm text-slate-300 dark:text-slate-600 shrink-0 font-bold">→</span>
 
             {/* V 反算输入框 — 深度打通双向解算 */}
-            <div className="relative flex-1 min-w-0">
+            <label className="flex min-h-10 min-w-[124px] flex-1 items-center gap-1 rounded-xl border border-blue-200/60 bg-blue-50/80 px-2 shadow-inner dark:border-cyan-800/50 dark:bg-cyan-900/30">
+              <span className="text-xs font-bold text-blue-500 dark:text-cyan-400">V</span>
               <input
+                data-testid="flow-formula-velocity-input"
                 type="text" inputMode="decimal"
                 value={point.velocity || ''}
                 onChange={(e) => handleFormulaVelocityChange(e.target.value)}
                 placeholder="--"
-                className="w-full min-w-[65px] pl-1.5 pr-8 py-1 rounded-lg bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+                className="min-w-0 flex-1 bg-transparent text-center font-mono text-base font-black text-blue-700 outline-none dark:text-cyan-300"
               />
-              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
-            </div>
+              <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">m/s</span>
+            </label>
           </div>
         </>
       )}
 
       {/* ========= 直接输入模式：双容器响应式布局 [ 左侧参数块 | 右侧流速组合 ] ========= */}
       {mode === 'direct' && (
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 w-full">
+        <div className="grid w-full grid-cols-1 items-center gap-2 min-[390px]:grid-cols-[minmax(0,1fr)_minmax(174px,0.9fr)]">
           {/* 左侧参数块：Kα + 深度连体胶囊 */}
-          <div className="flex items-center gap-1.5 grow flex-[1.3] min-w-[185px]">
+          <div className="flex min-w-0 items-center gap-1.5">
             {/* 1. Kα 输入块 - 拓宽防溢出与圆角高亮 */}
             <div className="flex items-center justify-center px-1 py-1 rounded-lg bg-slate-100/80 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 w-[55px] shrink-0 shadow-sm focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
               <span className="text-[9px] text-slate-400 font-bold mr-0.5">Kα</span>
@@ -200,39 +202,41 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             </div>
 
             {/* 2. 深度连体胶囊 - 升级圆角与高亮 */}
-            <div className="flex items-center rounded-lg bg-white/80 dark:bg-gray-900/50 border border-slate-200/80 dark:border-gray-600 shadow-inner overflow-hidden flex-1 min-w-[125px] divide-x divide-slate-200/50 dark:divide-gray-700/50 focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 transition-colors">
-              <div className="flex items-center px-1 py-1 flex-1 min-w-[40px]">
+            <div className="flex min-w-0 flex-1 items-center divide-x divide-slate-200/50 overflow-hidden rounded-lg border border-slate-200/80 bg-white/80 shadow-inner transition-colors focus-within:border-hydro-blue focus-within:ring-1 focus-within:ring-hydro-blue/30 dark:divide-gray-700/50 dark:border-gray-600 dark:bg-gray-900/50">
+              <div className="flex min-w-0 flex-1 items-center px-1 py-1">
                 <span className="text-[11px] text-blue-500 dark:text-cyan-400 mr-0.5 shrink-0">▾</span>
                 <input type="text" inputMode="decimal" value={point.relativeDepth}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { relativeDepth: e.target.value })}
-                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-blue-600 dark:text-cyan-300 font-bold border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
+                  className="w-full min-w-0 bg-transparent text-center font-mono text-sm font-bold text-blue-600 outline-none dark:text-cyan-300" />
               </div>
-              <div className="flex items-center px-1 py-1 flex-1 min-w-[65px]">
+              <div className="flex min-w-0 flex-1 items-center px-1 py-1">
                 <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-0.5 shrink-0">⇊</span>
                 <input type="text" inputMode="decimal" value={point.absoluteDepth || ''}
                   onChange={(e) => updateMeasurePoint(verticalId, point.id, { absoluteDepth: e.target.value })}
                   placeholder="--"
-                  className="w-full min-w-[40px] bg-transparent text-[11px] font-mono text-slate-600 dark:text-slate-300 border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-center" />
+                  className="w-full min-w-0 bg-transparent text-center font-mono text-sm text-slate-600 outline-none dark:text-slate-300" />
               </div>
             </div>
           </div>
 
           {/* 右侧流速组合容器 - 优化最小宽度释放 10px 空间防止按钮越界 */}
-          <div className="flex items-center gap-1.5 whitespace-nowrap grow flex-1 min-w-[95px]">
+          <div className="flex min-w-[174px] items-center gap-1.5 whitespace-nowrap">
             {/* V 直接输入 */}
-            <div className="relative flex-1 min-w-0">
+            <label className="flex min-h-10 min-w-[124px] flex-1 items-center gap-1 rounded-xl border border-blue-200/60 bg-blue-50/80 px-2 shadow-inner dark:border-cyan-800/50 dark:bg-cyan-900/30">
+              <span className="text-xs font-bold text-blue-500 dark:text-cyan-400">V</span>
               <input
+                data-testid="flow-velocity-input"
                 type="text" inputMode="decimal"
                 value={point.velocity}
                 onChange={(e) => handleVelocityChange(e.target.value)}
                 placeholder=""
-                className="w-full min-w-[55px] pl-1.5 pr-9 py-1 rounded-lg bg-blue-50/80 dark:bg-cyan-900/30 border border-blue-200/60 dark:border-cyan-800/50 shadow-inner text-[12px] font-black text-blue-700 dark:text-cyan-300 font-mono text-center outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 transition-all"
+                className="min-w-0 flex-1 bg-transparent text-center font-mono text-base font-black text-blue-700 outline-none dark:text-cyan-300"
               />
-              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 dark:text-slate-500 pointer-events-none whitespace-nowrap">m/s</span>
-            </div>
+              <span className="shrink-0 text-xs text-slate-400 dark:text-slate-500">m/s</span>
+            </label>
 
             {/* 模式切换按钮 - 升级圆角 */}
-            <button aria-label="切换为转数历时公式输入" onClick={handleModeToggle} className="flex min-h-11 min-w-11 items-center justify-center rounded-lg bg-slate-100 dark:bg-gray-700 text-slate-400 hover:text-blue-500 shrink-0 transition-colors">
+            <button aria-label="切换为转数历时公式输入" onClick={handleModeToggle} className="glass-icon-button shrink-0">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>

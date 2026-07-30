@@ -3,6 +3,11 @@ const DEAD_ZONE_DEGREES = 0.05;
 const BUBBLE_MAX_RADIUS = 92;
 const BUBBLE_PIXELS_PER_DEGREE = 9;
 
+export interface TiltVector {
+  x: number;
+  y: number;
+}
+
 export function rotateForScreen(x: number, y: number, angle: number): { x: number; y: number } {
   const normalized = ((Math.round(angle / 90) * 90) % 360 + 360) % 360;
   if (normalized === 90) return { x: -y, y: x };
@@ -11,8 +16,8 @@ export function rotateForScreen(x: number, y: number, angle: number): { x: numbe
   return { x, y };
 }
 
-export function applyDeadZone(value: number): number {
-  return Math.abs(value) < DEAD_ZONE_DEGREES ? 0 : value;
+export function applyDeadZone(value: number, deadZone = DEAD_ZONE_DEGREES): number {
+  return Math.abs(value) < deadZone ? 0 : value;
 }
 
 export function boundedBubblePosition(x: number, y: number): { x: number; y: number } {
@@ -27,13 +32,36 @@ export function boundedBubblePosition(x: number, y: number): { x: number; y: num
 }
 
 export function lowPassTilt(
-  previous: { x: number; y: number } | null,
-  next: { x: number; y: number },
+  previous: TiltVector | null,
+  next: TiltVector,
   alpha = FILTER_ALPHA,
-): { x: number; y: number } {
+): TiltVector {
   if (!previous) return next;
+  const clampedAlpha = Math.min(1, Math.max(0, alpha));
   return {
-    x: previous.x + alpha * (next.x - previous.x),
-    y: previous.y + alpha * (next.y - previous.y),
+    x: previous.x + clampedAlpha * (next.x - previous.x),
+    y: previous.y + clampedAlpha * (next.y - previous.y),
   };
+}
+
+export function medianTilt(samples: TiltVector[]): TiltVector | null {
+  if (samples.length === 0) return null;
+  const median = (values: number[]) => {
+    const ordered = [...values].sort((left, right) => left - right);
+    const middle = Math.floor(ordered.length / 2);
+    return ordered.length % 2 === 0
+      ? (ordered[middle - 1] + ordered[middle]) / 2
+      : ordered[middle];
+  };
+  return { x: median(samples.map((sample) => sample.x)), y: median(samples.map((sample) => sample.y)) };
+}
+
+export function nextCenteredState(
+  deviation: number | null,
+  wasCentered: boolean,
+  enterLimitDegrees: number,
+  exitLimitDegrees: number,
+): boolean {
+  if (deviation === null || !Number.isFinite(deviation)) return false;
+  return wasCentered ? deviation <= exitLimitDegrees : deviation <= enterLimitDegrees;
 }

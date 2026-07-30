@@ -435,6 +435,36 @@ function testLevelingStoreHistory(): void {
   useLevelingStore.setState({ currentRoute: createEmptyLevelingRoute('4'), routes: [], isDirty: false });
 }
 
+function testReturnLegWorkflow(): void {
+  const route = createEmptyLevelingRoute('4');
+  const forwardStation = createEmptyLevelingStation(1, 'forward');
+  forwardStation.readings = { ...forwardStation.readings, backPoint: 'A', forePoint: 'B' };
+  route.stations = [forwardStation];
+  useLevelingStore.setState({ currentRoute: route, routes: [], isDirty: false, lastAddedStationId: null });
+
+  useLevelingStore.getState().beginReturnLeg();
+  let state = useLevelingStore.getState();
+  assert(state.currentRoute.routeType === 'round-trip' && state.currentRoute.direction === 'return', '开始返测应切换为往返路线和返测测段');
+  assert(state.currentRoute.returnStartStationId === forwardStation.id && Boolean(state.currentRoute.returnStartedAt), '返测起点和时间应持久化');
+
+  useLevelingStore.getState().addStation(undefined, {
+    lat: 30.123456,
+    lng: 120.654321,
+    accuracyM: 6.5,
+    capturedAt: '2026-07-30T00:00:00.000Z',
+    source: 'native-gps',
+  });
+  state = useLevelingStore.getState();
+  const returnStation = state.currentRoute.stations[1];
+  assert(returnStation.direction === 'return' && returnStation.readings.backPoint === 'B', '返测后新增测站应自动继承返测方向和前站点名');
+  assert(returnStation.lat === 30.123456 && returnStation.lng === 120.654321 && returnStation.locationAccuracyM === 6.5 && returnStation.locationSource === 'native-gps', '定位建站应保存坐标、精度和来源');
+
+  useLevelingStore.getState().addStation(forwardStation.id);
+  state = useLevelingStore.getState();
+  assert(state.currentRoute.stations[1].direction === 'forward' && state.currentRoute.stations[2].direction === 'return', '历史插站只能继承所在测段，不得改变返测状态');
+  useLevelingStore.setState({ currentRoute: createEmptyLevelingRoute('4'), routes: [], isDirty: false, lastAddedStationId: null });
+}
+
 function testMigration(): void {
   const migrated = migrateLevelingPersistedState({
     currentRoute: {
@@ -454,8 +484,21 @@ function testMigration(): void {
   });
   assert(migrated.currentRoute.schemaVersion === LEVELING_SCHEMA_VERSION, `旧数据应迁移到版本 ${LEVELING_SCHEMA_VERSION}`);
   assert(migrated.currentRoute.stations[0].direction === 'return', '旧返字点名只在迁移时推断方向');
+  assert(migrated.currentRoute.stations[0].readings.backPoint === '返B', '迁移不得改写历史测点名称');
   assert(migrated.currentRoute.knownPoints[0].elevation === null, '旧空白占位 0 应恢复为空值');
   assert(migrated.currentRoute.stations[0].stationNumber === 1, '旧索引应重排');
+
+  const legacyPhased = migrateLevelingPersistedState({
+    currentRoute: {
+      grade: '4',
+      direction: 'return',
+      stations: [
+        { id: 'legacy-forward', readings: { ...createEmptyLevelingStation(1, 'forward').readings, backPoint: 'A', forePoint: 'B' } },
+        { id: 'legacy-return', readings: { ...createEmptyLevelingStation(2, 'forward').readings, backPoint: '返B', forePoint: '返A' } },
+      ],
+    },
+  });
+  assert(legacyPhased.currentRoute.stations.map((station) => station.direction).join(',') === 'forward,return', '旧路线返测状态不得把既有往测站错误迁移为返测');
 
   const malformed = migrateLevelingPersistedState({
     currentRoute: {
@@ -703,6 +746,7 @@ testLevelingEngine();
 testRouteCalculations();
 testLevelingVisualData();
 testLevelingStoreHistory();
+testReturnLegWorkflow();
 testMigration();
 testGovernanceSnapshotsAndAudit();
 testLockedResultsCreateRevisions();

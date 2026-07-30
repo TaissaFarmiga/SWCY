@@ -3,28 +3,17 @@ import { RadarTrajectoryDrawer } from './RadarTrajectoryDrawer';
 import { LevelingProfileDrawer } from './LevelingProfileDrawer';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Plus, Waves, History, Play, Square, Sun, Moon, Trash2, Download, Upload, Settings, LineChart, MapPin, Calendar, BarChart3, Navigation, ChevronLeft } from 'lucide-react';
+import { Plus, Waves, History, Play, Square, Sun, Moon, Trash2, Download, Upload, Settings, LineChart, MapPin, Calendar, BarChart3, Navigation, ChevronLeft, MoreHorizontal, FileSpreadsheet } from 'lucide-react';
 
 // 导入真实的资产图标
-import hydroIconSrc from '../../../assets/icon.svg';
 
 import { useLevelingStore } from '../../store/levelingStore';
 import type { LevelingGrade, LevelingRoute } from '../../types/leveling';
 import { StationCard } from './StationCard';
 import { LevelingSaveHub } from './LevelingSaveHub';
 import { useUiStore } from '../../store/uiStore';
-
-// 📊 Numbers 图标
-function NumbersIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="15" width="20" height="7" rx="3" fill="#34C759" />
-      <rect x="5" y="8" width="3.5" height="7" rx="1" fill="#007AFF" />
-      <rect x="10.25" y="5" width="3.5" height="10" rx="1" fill="#FFCC00" />
-      <rect x="15.5" y="2" width="3.5" height="13" rx="1" fill="#34C759" />
-    </svg>
-  );
-}
+import { captureStationLocation } from '../../lib/stationLocation';
+import { triggerCenterFeedback } from '../../lib/mobileFeedback';
 
 const formatTime = (timeStr?: string) => {
   if (!timeStr) return '--:--';
@@ -67,7 +56,7 @@ function DeleteRouteButton({ onDelete }: { onDelete: () => void }) {
 export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; onBack: () => void }) {
   const { currentRoute, routes, hasHydrated } = useLevelingStore();
   const {
-    updateRouteMeta, addStation, markTime, showHistoryPanel, toggleHistoryPanel,
+    updateRouteMeta, addStation, beginReturnLeg, markTime, showHistoryPanel, toggleHistoryPanel,
     loadRoute, deleteRoute, createRoute, addKnownPoint, updateKnownPoint, removeKnownPoint,
     lastAddedStationId, setLastAddedStationId // 🚀 订阅自动定位所需的临时 ID
   } = useLevelingStore();
@@ -79,8 +68,21 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
   const [showResultDrawer, setShowResultDrawer] = useState(false);
   const [showRadarDrawer, setShowRadarDrawer] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
-  const [isLocating, setIsLocating] = useState(false); // GPS 寻星 Loading 状态
-  const lastGradeWheelAtRef = useRef(0);
+  const [showMore, setShowMore] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationFailure, setLocationFailure] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showNotice = (message: string) => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    setNotice(message);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 3_200);
+  };
+
+  useEffect(() => () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!isActive) return;
@@ -88,6 +90,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
       if (showResultDrawer) setShowResultDrawer(false);
       else if (showProfileDrawer) setShowProfileDrawer(false);
       else if (showRadarDrawer) setShowRadarDrawer(false);
+      else if (showMore) setShowMore(false);
       else if (showSettings) setShowSettings(false);
       else if (showHistoryPanel) toggleHistoryPanel();
       else return;
@@ -95,25 +98,21 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
     };
     window.addEventListener('hydro-app-back', handleAppBack);
     return () => window.removeEventListener('hydro-app-back', handleAppBack);
-  }, [isActive, showHistoryPanel, showProfileDrawer, showRadarDrawer, showResultDrawer, showSettings, toggleHistoryPanel]);
+  }, [isActive, showHistoryPanel, showMore, showProfileDrawer, showRadarDrawer, showResultDrawer, showSettings, toggleHistoryPanel]);
 
   // 🛰️ 异步 GPS 打卡建站钩子
   const handleAddStationWithGPS = async () => {
     if (isLocating) return;
     setIsLocating(true);
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 4000, // 4秒极限超时，防止野外无信号卡死干活进度
-          maximumAge: 10000
-        });
-      });
-      // 成功抓取坐标，带经纬度建站
-      addStation(undefined, position.coords.latitude, position.coords.longitude);
-    } catch (error) {
-      console.warn('GPS 信号弱或未授权，安全降级为无坐标建站', error);
-      addStation(); // 降级兜底
+      const result = await captureStationLocation();
+      if (result.status === 'captured') {
+        addStation(undefined, result.location);
+        setLocationFailure(null);
+        showNotice(`已记录定位${result.location.accuracyM ? `，精度 ±${Math.round(result.location.accuracyM)} m` : ''}`);
+      } else {
+        setLocationFailure(result.message);
+      }
     } finally {
       setIsLocating(false);
     }
@@ -146,6 +145,24 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
 
   const stations = currentRoute.stations;
   const stationCount = stations.length;
+  const hasRecordedReadings = stations.some(({ readings }) => (
+    readings.intermediates.length > 0
+    || Object.values(readings).some((value) => typeof value === 'string' && value.trim() !== '')
+  ));
+  const changeGrade = (grade: LevelingGrade) => {
+    if (grade === currentRoute.grade) return;
+    if (hasRecordedReadings) {
+      showNotice('已有读数，不能原地切换等级；请新建路线后选择等级');
+      return;
+    }
+    updateRouteMeta({ grade });
+    void triggerCenterFeedback();
+  };
+  const startReturnLeg = () => {
+    beginReturnLeg();
+    showNotice('已开始返测；后续新增测站自动为返测');
+    void triggerCenterFeedback();
+  };
   const calculation = currentRoute.calculation;
   const isErrorOverLimit = calculation.isWithinTolerance === false;
   const evalStatus = calculation.isWithinTolerance === null ? '待闭合' : calculation.isWithinTolerance ? '合格' : '超限';
@@ -173,37 +190,39 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
   return (
     <div data-testid="leveling-screen" className="min-h-screen pb-8 bg-gradient-to-br from-[#F2F2F7] to-slate-100 dark:from-gray-950 dark:to-slate-900 overflow-x-hidden">
 
-      {/* 🚀 第 1 层：全局微光标题栏 */}
-      <header className="app-safe-header relative z-20 bg-[#F2F2F7] dark:bg-gray-950 border-b border-slate-200/60 dark:border-gray-800/60">
-        <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
-          <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="flex min-h-11 items-center gap-1 rounded-xl pr-1.5 text-left transition-colors hover:bg-white/60 active:scale-[0.98] dark:hover:bg-gray-800/60">
-            <ChevronLeft className="h-5 w-5 shrink-0 text-slate-500 dark:text-slate-300" />
-            {/* 彻底去除冗余的白边、padding和border，让原生图标完全透出 */}
-            <div className="shrink-0 w-7 h-7 flex items-center justify-center overflow-hidden">
-              <img src={hydroIconSrc} alt="logo" className="w-full h-full object-contain" />
-            </div>
-            <div className="flex flex-col justify-center">
-              <span className="max-w-[120px] text-[13px] font-bold text-slate-800 dark:text-white truncate leading-tight">
-                {currentRoute.name || '未设置测量对象'}
-              </span>
-              <div className="flex items-center mt-0.5">
-                <span className="text-[9px] font-bold text-indigo-500/90 dark:text-indigo-400/90 leading-none bg-indigo-50 dark:bg-indigo-900/30 px-1 py-[3px] rounded-md border border-indigo-100 dark:border-indigo-800/50">
-                  {routeTypeLabel}
-                </span>
-              </div>
-            </div>
+      <header data-testid="leveling-app-header" className="app-safe-header relative z-30 border-b border-white/70 bg-[#F2F2F7]/82 backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-950/82">
+        <div className="flex min-h-12 items-center gap-1 px-2 py-1">
+          <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button">
+            <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-1 flex-wrap justify-end">
-            <button onClick={() => document.getElementById('leveling-import-input')?.click()} className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 hover:text-amber-600 hover:bg-amber-50" title="导入 JSON"><Download className="w-4 h-4" /></button>
-            <button onClick={() => useLevelingStore.getState().exportCurrentRouteJSON()} className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 hover:text-indigo-600" title="导出 JSON"><Upload className="w-4 h-4" /></button>
-            <button onClick={() => void useLevelingStore.getState().exportData().catch((error: unknown) => console.error('[水准导出] 生成 Excel 失败', error))} className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 hover:text-emerald-600" title="导出 Numbers/Excel"><NumbersIcon className="w-4 h-4" /></button>
-            <button onClick={() => setDarkMode(!darkMode)} aria-label={darkMode ? '切换浅色模式' : '切换深色模式'} className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-white/60 dark:bg-gray-800/60 border border-white/80 dark:border-gray-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-gray-800">
-              {darkMode ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <input id="leveling-import-input" type="file" accept=".json" onChange={handleImportFile} className="w-0 h-0 opacity-0 absolute pointer-events-none" />
+          <div className="min-w-0 flex-1 px-1">
+            <h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">{currentRoute.name || '水准测量'}</h1>
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{routeTypeLabel} · {currentRoute.direction === 'return' ? '返测中' : '往测中'}</p>
           </div>
+          <button data-testid="leveling-result" type="button" onClick={() => setShowResultDrawer(true)} aria-label="成果表" title="成果表" className="glass-icon-button">
+            <BarChart3 className="h-4 w-4" />
+          </button>
+          <button data-testid="leveling-more" type="button" onClick={() => setShowMore((value) => !value)} aria-label="更多功能" title="更多功能" aria-expanded={showMore} className="glass-icon-button">
+            <MoreHorizontal className="h-5 w-5" />
+          </button>
         </div>
+        <input id="leveling-import-input" type="file" accept=".json" onChange={handleImportFile} className="sr-only" />
       </header>
+
+      <AnimatePresence>
+        {showMore && (
+          <motion.section data-testid="leveling-more-menu" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="relative z-20 mx-2 mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/75 bg-white/82 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/82 min-[390px]:grid-cols-3">
+            <button type="button" onClick={() => { setShowProfileDrawer(true); setShowMore(false); }} className="glass-menu-button"><LineChart className="h-4 w-4" />纵断面</button>
+            <button type="button" onClick={() => { setShowRadarDrawer(true); setShowMore(false); }} className="glass-menu-button"><Navigation className="h-4 w-4" />测站轨迹</button>
+            <button type="button" onClick={() => { toggleHistoryPanel(); setShowMore(false); }} className="glass-menu-button"><History className="h-4 w-4" />历史记录</button>
+            <button type="button" onClick={() => document.getElementById('leveling-import-input')?.click()} className="glass-menu-button"><Download className="h-4 w-4" />导入 JSON</button>
+            <button type="button" onClick={() => { useLevelingStore.getState().exportCurrentRouteJSON(); setShowMore(false); }} className="glass-menu-button"><Upload className="h-4 w-4" />导出 JSON</button>
+            <button type="button" onClick={() => { void useLevelingStore.getState().exportData().catch(() => showNotice('Excel 导出失败')); setShowMore(false); }} className="glass-menu-button"><FileSpreadsheet className="h-4 w-4" />导出 Excel</button>
+            <button type="button" onClick={() => { setDarkMode(!darkMode); setShowMore(false); }} className="glass-menu-button">{darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}{darkMode ? '浅色模式' : '深色模式'}</button>
+            <button type="button" onClick={() => { setShowSettings(true); setShowMore(false); }} className="glass-menu-button"><Settings className="h-4 w-4" />测量设置</button>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {/* 🚀 第 2 层：动态全息 HUD 仪表盘 (Universal HUD) */}
       <div className="relative z-30 px-2 py-2 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
@@ -343,124 +362,22 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
         </AnimatePresence>
       </div>
 
-      {/* 🚀 第 4 层：测段工具栏 (Tool Bar) */}
-      <div className="flex flex-wrap items-center justify-center gap-2 px-2 pb-2 relative z-0">
-
-        {/* 🍏 极客交互：无尽莫比乌斯环 3D 机械滚轮 (Infinite Circular Drum) */}
-        <motion.div
-          role="button"
-          tabIndex={0}
-          aria-label={`当前等级：${currentRoute.grade === 'out' ? '普通' : `${currentRoute.grade}等`}，点击切换`}
-          className="relative w-[64px] h-[44px] rounded-[12px] bg-slate-200/50 dark:bg-gray-800/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] overflow-hidden shrink-0 cursor-ns-resize select-none touch-none z-10"
-          style={{
-            maskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 30%, black 70%, transparent 100%)',
-            perspective: '150px'
-          }}
-          onWheel={(e) => {
-            const now = Date.now();
-            if (now - lastGradeWheelAtRef.current < 150) return;
-            const offset = e.deltaY;
-            if (Math.abs(offset) < 5) return;
-            lastGradeWheelAtRef.current = now;
-
-            const grades: LevelingGrade[] = ['out', '4', '3'];
-            const currentIndex = grades.indexOf(currentRoute.grade);
-
-            // 🚀 环形取模：无视边界，无限循环
-            const next = offset > 0
-              ? (currentIndex + 1) % 3  // 滚轮向下 -> 切换到下一个
-              : (currentIndex - 1 + 3) % 3; // 滚轮向上 -> 切换到上一个
-
-            if (navigator.vibrate) navigator.vibrate(10);
-            updateRouteMeta({ grade: grades[next] });
-          }}
-          onPanEnd={(_e, info) => {
-            const offset = info.offset.y;
-            if (Math.abs(offset) < 10) return;
-            const grades: LevelingGrade[] = ['out', '4', '3'];
-            const currentIndex = grades.indexOf(currentRoute.grade);
-
-            // 🚀 环形取模：无视边界，无限循环
-            const next = offset < 0
-              ? (currentIndex + 1) % 3  // 手指上滑 -> 界面上移 -> 露出下方元素 (下一个)
-              : (currentIndex - 1 + 3) % 3; // 手指下滑 -> 界面下移 -> 露出上方元素 (上一个)
-
-            if (navigator.vibrate) navigator.vibrate(10);
-            updateRouteMeta({ grade: grades[next] });
-          }}
-          onTap={() => {
-             const grades: LevelingGrade[] = ['out', '4', '3'];
-             const next = (grades.indexOf(currentRoute.grade) + 1) % 3;
-             if (navigator.vibrate) navigator.vibrate(10);
-             updateRouteMeta({ grade: grades[next] });
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            const grades: LevelingGrade[] = ['out', '4', '3'];
-            const next = (grades.indexOf(currentRoute.grade) + 1) % 3;
-            updateRouteMeta({ grade: grades[next] });
-          }}
-        >
-          {/* 🎯 居中高亮悬浮窗 */}
-          <div className="absolute top-1/2 left-[4px] right-[4px] -translate-y-1/2 h-[24px] bg-white/90 dark:bg-gray-700/90 rounded-[8px] shadow-sm border border-slate-200/80 dark:border-gray-600/80 pointer-events-none" />
-
-          {/* 3D 齿轮文字：引入最短圆柱路径算法 */}
-          {(['out', '4', '3'] as LevelingGrade[]).map((g, i) => {
-            const currentIndex = (['out', '4', '3'] as LevelingGrade[]).indexOf(currentRoute.grade);
-
-            // 🚀 核心数学引擎：最短环形距离计算 (Shortest Circular Path Offset)
-            // 确保当选中"三等"时，"普通"会自动瞬移到"三等"下方；当选中"普通"时，"三等"自动跑到"普通"上方。
-            let offset = i - currentIndex;
-            if (offset > 1) offset -= 3; // +2 修正为 -1 (瞬移到上方)
-            if (offset < -1) offset += 3; // -2 修正为 +1 (瞬移到下方)
-
-            return (
-              <motion.div
-                key={g}
-                initial={false}
-                animate={{
-                  y: offset * 18, // 控制露出的高度
-                  rotateX: offset * -50,
-                  scale: offset === 0 ? 1 : 0.8,
-                  opacity: offset === 0 ? 1 : 0.4,
-                }}
-                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-                className={`absolute inset-0 flex items-center justify-center font-bold text-[13px] tracking-widest pointer-events-none ${offset === 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}
-                style={{ transformStyle: 'preserve-3d' }}
-              >
-                {g === 'out' ? '普通' : g === '4' ? '四等' : '三等'}
-              </motion.div>
-            );
-          })}
-        </motion.div>
-
-        {/* 设置按钮 */}
-        <button type="button" onClick={() => setShowSettings(!showSettings)} title="测量设置" className={`flex min-h-11 min-w-11 items-center justify-center rounded-xl border shadow-sm active:scale-95 transition-all shrink-0 ${showSettings ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white/60 dark:bg-gray-800/60 border-white/80 dark:border-gray-700/60 text-slate-600 dark:text-slate-300 hover:bg-white/90'}`}>
-          <Settings className="w-4 h-4" />
-        </button>
-
-        <motion.button type="button" onClick={() => setShowProfileDrawer(true)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="relative flex min-h-11 items-center gap-1.5 overflow-hidden rounded-xl border border-indigo-400/40 bg-gradient-to-r from-indigo-600/80 to-blue-600/80 px-3 text-[11px] font-bold text-white shadow-lg shadow-indigo-500/20 shrink-0">
-          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-          <LineChart className="relative w-3.5 h-3.5" />
-          <span className="relative">纵断面</span>
-        </motion.button>
-
-        {/* 雷达轨迹入口 */}
-        <motion.button type="button" onClick={() => setShowRadarDrawer(true)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="relative flex min-h-11 items-center gap-1.5 overflow-hidden rounded-xl border border-indigo-400/40 bg-gradient-to-r from-indigo-600/80 to-blue-600/80 px-3 text-[11px] font-bold text-white shadow-lg shadow-indigo-500/20 shrink-0">
-          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-          <Navigation className="relative w-3.5 h-3.5" />
-          <span className="relative">雷达轨迹</span>
-        </motion.button>
-
-        {/* 成果表抽屉入口 */}
-        <motion.button type="button" onClick={() => setShowResultDrawer(true)} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="relative flex min-h-11 items-center gap-1.5 overflow-hidden rounded-xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/90 to-teal-600/90 px-3 text-[11px] font-bold text-white shadow-lg shadow-emerald-500/20 shrink-0">
-          <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
-          <BarChart3 className="relative w-3.5 h-3.5" />
-          <span className="relative">成果表</span>
-        </motion.button>
-      </div>
+      <section className="px-2 pb-2">
+        <div className="flex min-h-12 items-center gap-2 rounded-2xl border border-white/75 bg-white/65 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/65">
+          <div role="radiogroup" aria-label="水准等级" className="flex min-w-0 flex-1 rounded-full bg-slate-100/85 p-0.5 dark:bg-gray-800/85">
+            {([['out', '普通'], ['4', '四等'], ['3', '三等']] as const).map(([grade, label]) => (
+              <button key={grade} type="button" role="radio" aria-checked={currentRoute.grade === grade} onClick={() => changeGrade(grade)} className={`min-h-10 min-w-0 flex-1 rounded-full px-2 text-xs font-bold transition-colors ${currentRoute.grade === grade ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-700 dark:text-cyan-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {currentRoute.direction === 'return' ? (
+            <span data-testid="leveling-return-state" className="inline-flex min-h-10 shrink-0 items-center rounded-full bg-violet-100 px-3 text-xs font-bold text-violet-700 dark:bg-violet-900/35 dark:text-violet-300">返测中</span>
+          ) : (
+            <button data-testid="leveling-start-return" type="button" disabled={stationCount === 0} onClick={startReturnLeg} className="glass-pill-button shrink-0 disabled:opacity-40">开始返测</button>
+          )}
+        </div>
+      </section>
 
       {/* ⚙️ 内嵌测量设置面板 (场景化直录版) */}
       <AnimatePresence>
@@ -484,24 +401,18 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 <label className="rounded-lg border border-slate-200 px-2 py-1 dark:border-gray-700">
                   <span className="block text-[10px] font-bold text-slate-400">路线类型</span>
                   <select value={currentRoute.routeType} onChange={(event) => updateRouteMeta({ routeType: event.target.value as LevelingRoute['routeType'] })} className="min-h-9 w-full bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200">
                     <option value="attached">附合路线</option>
                     <option value="closed">闭合路线</option>
-                    <option value="round-trip">往返路线</option>
+                    <option value="round-trip">往返路线（开始返测后自动设置）</option>
                     <option value="open">开放路线</option>
                   </select>
                 </label>
-                <label className="rounded-lg border border-slate-200 px-2 py-1 dark:border-gray-700">
-                  <span className="block text-[10px] font-bold text-slate-400">新站方向</span>
-                  <select value={currentRoute.direction} onChange={(event) => updateRouteMeta({ direction: event.target.value as LevelingRoute['direction'] })} className="min-h-9 w-full bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200">
-                    <option value="forward">往测</option>
-                    <option value="return">返测</option>
-                  </select>
-                </label>
               </div>
+              <p className="rounded-xl bg-slate-100/70 px-2.5 py-2 text-xs leading-5 text-slate-500 dark:bg-gray-900/65 dark:text-slate-400">站方向由测段统一控制。点击“开始返测”后，后续新增测站自动为返测。</p>
 
               <div className="flex items-center gap-2.5 rounded-lg px-2.5 border border-slate-200 dark:border-gray-700">
                 <Navigation className="w-4 h-4 text-slate-400 shrink-0" />
@@ -593,12 +504,16 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
 
       {/* 🏗️ 瀑布流测站 */}
       <div className="px-2 pt-1 pb-6 space-y-2 relative z-0">
-        <AnimatePresence mode="popLayout">
-          {stations.map((station, index) => (
-            <motion.div key={station.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }}>
-              <StationCard station={station} index={index} grade={currentRoute.grade} />
-            </motion.div>
-          ))}
+        <AnimatePresence initial={false}>
+          {stations.map((station, index) => {
+            const startsReturn = station.direction === 'return' && (index === 0 || stations[index - 1]?.direction !== 'return');
+            return (
+              <motion.div key={station.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.16 }}>
+                {startsReturn && <div className="my-2 flex items-center gap-2 text-xs font-bold text-violet-600 dark:text-violet-300"><span className="h-px flex-1 bg-violet-200 dark:bg-violet-800" />返测开始，后续新站自动返测<span className="h-px flex-1 bg-violet-200 dark:bg-violet-800" /></div>}
+                <StationCard station={station} index={index} grade={currentRoute.grade} />
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
 
         {stationCount === 0 && (
@@ -609,15 +524,24 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
           </motion.div>
         )}
 
-        {/* 🚀 异步 GPS 打卡添加新测站 */}
-        <button onClick={handleAddStationWithGPS} disabled={isLocating}
-          className="w-full min-h-11 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-white/40 dark:bg-gray-900/40 border border-dashed border-slate-300 dark:border-gray-600 text-sm font-bold text-slate-500 dark:text-slate-400 hover:border-indigo-500 dark:hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all disabled:opacity-50">
+        <button data-testid="leveling-add-station" type="button" onClick={handleAddStationWithGPS} disabled={isLocating}
+          className="glass-primary-button w-full disabled:opacity-50">
           {isLocating ? (
             <><div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /><span>🛰️ 寻星定位中...</span></>
           ) : (
-            <><Plus className="w-4 h-4 stroke-[3]" /><span>添加新测站</span></>
+            <><Plus className="w-4 h-4 stroke-[3]" /><span>添加测站并记录定位</span></>
           )}
         </button>
+        {locationFailure && (
+          <section data-testid="leveling-location-fallback" role="status" className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/85 p-2.5 text-amber-800 shadow-sm dark:border-amber-800/60 dark:bg-amber-950/35 dark:text-amber-200">
+            <p className="text-xs font-semibold">{locationFailure}</p>
+            <div className="mt-2 flex gap-2">
+              <button data-testid="leveling-continue-without-location" type="button" onClick={() => { addStation(); setLocationFailure(null); showNotice('已无定位建站'); }} className="glass-pill-button flex-1">无定位继续</button>
+              <button type="button" onClick={() => void handleAddStationWithGPS()} className="glass-pill-button flex-1">重新定位</button>
+            </div>
+          </section>
+        )}
+        {notice && <p role="status" aria-live="polite" className="mt-2 rounded-xl bg-slate-900/85 px-3 py-2 text-center text-xs font-semibold text-white dark:bg-white/90 dark:text-slate-900">{notice}</p>}
       </div>
 
      {/* 📊 物理重力扭曲·成果抽屉 */}
