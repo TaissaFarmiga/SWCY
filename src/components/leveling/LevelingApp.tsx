@@ -12,6 +12,7 @@ import { useLevelingStore } from '../../store/levelingStore';
 import type { LevelingGrade, LevelingRoute } from '../../types/leveling';
 import { StationCard } from './StationCard';
 import { LevelingSaveHub } from './LevelingSaveHub';
+import { useUiStore } from '../../store/uiStore';
 
 // 📊 Numbers 图标
 function NumbersIcon({ className }: { className?: string }) {
@@ -71,11 +72,8 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
     lastAddedStationId, setLastAddedStationId // 🚀 订阅自动定位所需的临时 ID
   } = useLevelingStore();
 
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved) return saved === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  const darkMode = useUiStore((state) => state.darkMode);
+  const setDarkMode = useUiStore((state) => state.setDarkMode);
 
   const [showSettings, setShowSettings] = useState(false);
   const [showResultDrawer, setShowResultDrawer] = useState(false);
@@ -83,11 +81,6 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [isLocating, setIsLocating] = useState(false); // GPS 寻星 Loading 状态
   const lastGradeWheelAtRef = useRef(0);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -178,10 +171,10 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
   if (!hasHydrated) return <div className="flex min-h-[100dvh] items-center justify-center text-sm text-slate-400">正在恢复水准测量数据…</div>;
 
   return (
-    <div className="min-h-screen pb-8 bg-gradient-to-br from-[#F2F2F7] to-slate-100 dark:from-gray-950 dark:to-slate-900 overflow-x-hidden">
+    <div data-testid="leveling-screen" className="min-h-screen pb-8 bg-gradient-to-br from-[#F2F2F7] to-slate-100 dark:from-gray-950 dark:to-slate-900 overflow-x-hidden">
 
       {/* 🚀 第 1 层：全局微光标题栏 */}
-      <header className="relative z-20 bg-[#F2F2F7] dark:bg-gray-950 pt-safe border-b border-slate-200/60 dark:border-gray-800/60">
+      <header className="app-safe-header relative z-20 bg-[#F2F2F7] dark:bg-gray-950 border-b border-slate-200/60 dark:border-gray-800/60">
         <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
           <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="flex min-h-11 items-center gap-1 rounded-xl pr-1.5 text-left transition-colors hover:bg-white/60 active:scale-[0.98] dark:hover:bg-gray-800/60">
             <ChevronLeft className="h-5 w-5 shrink-0 text-slate-500 dark:text-slate-300" />
@@ -518,6 +511,18 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
               <div className="flex items-center gap-2.5 rounded-lg px-2.5 border border-slate-200 dark:border-gray-700">
                 <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                 <input type="text" value={currentRoute.name || ''} onChange={(e) => updateRouteMeta({ name: e.target.value })} placeholder="测量对象 (如: 基本水尺校测)" className="flex-1 py-1.5 text-[13px] bg-transparent border-0 focus:ring-0 outline-none text-slate-700 dark:text-slate-200" />
+              </div>
+
+              <div className="rounded-lg bg-indigo-50/70 px-2 py-1 text-[10px] leading-4 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300">
+                当前仪器：{currentRoute.instrumentSnapshot?.name ?? (currentRoute.instrument || '未登记水准仪')}{currentRoute.instrumentSnapshot?.serialNumber ? ` · ${currentRoute.instrumentSnapshot.serialNumber}` : ''} · 规则 {currentRoute.ruleProfileSnapshot.name}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                {([
+                  ['taskNumber', '任务编号'], ['organization', '作业单位'], ['surveyor', '施测人员'], ['checker', '复核人员'],
+                  ['backStaffNumber', '后尺编号'], ['foreStaffNumber', '前尺编号'], ['weather', '天气'], ['terrain', '地形'],
+                ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRoute[key] ?? ''} onChange={(event) => updateRouteMeta({ [key]: event.target.value })} placeholder={placeholder} className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200" />)}
+                <textarea value={currentRoute.notes ?? ''} onChange={(event) => updateRouteMeta({ notes: event.target.value })} placeholder="备注" className="min-h-16 min-w-0 resize-y rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200 min-[360px]:col-span-2" />
               </div>
 
              {/* 💧 三栏并排：自适应宽度调优 */}

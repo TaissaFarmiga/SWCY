@@ -15,10 +15,27 @@
 import { processRun, createNewRun } from './HydroEngine';
 import type { Run } from '../types';
 
+export interface HydroBenchmarkExpected {
+  totalDischarge: number;
+  totalArea: number;
+  surfaceWidth: number;
+  meanVelocity: number;
+  maxDepth: number;
+  maxVelocity: number;
+}
+
+export interface HydroBenchmarkFixture {
+  id: string;
+  source: string;
+  buildRun: () => Run;
+  expected: HydroBenchmarkExpected;
+  relativeTolerancePercent: Partial<Record<keyof HydroBenchmarkExpected, number>>;
+}
+
 /**
  * 根据郑家屯记载表构建测试测次
  */
-function buildZhengJiaTunRun(): Run {
+export function buildZhengJiaTunRun(): Run {
   const run = createNewRun(1, 'open');
   
   // 设置流速仪公式
@@ -103,19 +120,9 @@ function buildZhengJiaTunRun(): Run {
 /**
  * 运行郑家屯真值对标测试
  */
-export function runZhengJiaTunBenchmark() {
-  const run = buildZhengJiaTunRun();
+export function runHydroBenchmark(fixture: HydroBenchmarkFixture) {
+  const run = fixture.buildRun();
   const result = processRun(run);
-  
-  // 档案真值
-  const ARCHIVE = {
-    totalDischarge: 0.911,
-    totalArea: 4.21,
-    surfaceWidth: 15.0,
-    meanVelocity: 0.22,
-    maxDepth: 0.42,
-    maxVelocity: 0.35,
-  };
   
   const computed = {
     totalDischarge: parseFloat(result.totalDischarge || '0'),
@@ -126,18 +133,19 @@ export function runZhengJiaTunBenchmark() {
     maxVelocity: parseFloat(result.maxVelocity || '0'),
   };
   
-  console.log('=== 郑家屯站 真值对标测试 ===');
+  console.log(`=== ${fixture.id} 真值对标测试 ===`);
+  console.log(`来源：${fixture.source}`);
   console.log('');
   
-  const keys = Object.keys(ARCHIVE) as (keyof typeof ARCHIVE)[];
+  const keys = Object.keys(fixture.expected) as (keyof HydroBenchmarkExpected)[];
   let allPassed = true;
   
   keys.forEach(key => {
-    const expected = ARCHIVE[key];
+    const expected = fixture.expected[key];
     const actual = computed[key];
     const error = Math.abs(actual - expected);
     const relError = expected !== 0 ? (error / Math.abs(expected)) * 100 : error * 100;
-    const passed = relError < 5; // 5% 容差
+    const passed = relError <= (fixture.relativeTolerancePercent[key] ?? 0);
     
     if (!passed) allPassed = false;
     
@@ -167,5 +175,28 @@ export function runZhengJiaTunBenchmark() {
   return { result, allPassed };
 }
 
-// 如果直接运行此模块
-runZhengJiaTunBenchmark();
+export const ZHENG_JIA_TUN_FIXTURE: HydroBenchmarkFixture = {
+  id: '郑家屯(六)站 2026-05-31',
+  source: '郑家屯(六)站 2026年5月31日流量测验记载计算表',
+  buildRun: buildZhengJiaTunRun,
+  expected: {
+    totalDischarge: 0.911,
+    totalArea: 4.21,
+    surfaceWidth: 15,
+    meanVelocity: 0.22,
+    maxDepth: 0.42,
+    maxVelocity: 0.35,
+  },
+  relativeTolerancePercent: {
+    totalDischarge: 5,
+    totalArea: 5,
+    surfaceWidth: 0,
+    meanVelocity: 5,
+    maxDepth: 0,
+    maxVelocity: 0,
+  },
+};
+
+export function runZhengJiaTunBenchmark() {
+  return runHydroBenchmark(ZHENG_JIA_TUN_FIXTURE);
+}

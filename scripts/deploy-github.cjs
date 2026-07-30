@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const REPOSITORY = 'TaissaFarmiga/SWCY';
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`;
 const ROOT = path.resolve(__dirname, '..');
-const APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/debug/app-debug.apk');
+const APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/enterprise/release/app-enterprise-release.apk');
 
 function commandName(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name;
@@ -175,7 +175,7 @@ async function main() {
   run(commandName('npm'), ['test']);
   run(commandName('npm'), ['run', 'build']);
   run(commandName('npx'), ['cap', 'sync', 'android']);
-  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleDebug', '--no-daemon', '--console=plain', '-q'], { cwd: path.join(ROOT, 'android') });
+  run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleEnterpriseRelease', '--no-daemon', '--console=plain', '-q'], { cwd: path.join(ROOT, 'android') });
 
   if (!fs.existsSync(APK_PATH) || fs.statSync(APK_PATH).size <= 0) throw new Error('Android APK 未生成');
   assertCleanWorktree('构建后');

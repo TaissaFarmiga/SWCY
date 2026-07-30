@@ -8,23 +8,14 @@ import type {
   SurveyDirection,
 } from '../types/leveling';
 import { LEVELING_SCHEMA_VERSION } from '../types/leveling';
+import type { LevelingRuleProfile, RuleProfileSnapshot } from '../types/governance';
 import { Decimal } from './rounding';
 import { processStation } from './LevelingEngine';
-
-interface ClosureRule {
-  readonly distanceCoefficient: number | null;
-  readonly stationCoefficient: number;
-  readonly useStationFormulaAlways: boolean;
-}
+import { DEFAULT_LEVELING_RULE_PROFILE, ROUTE_CLOSURE_RULE_SOURCE } from './levelingRules';
 
 /** 沿用现有项目公式参数；规范原文与地区条件仍须业务方复核。 */
-export const ROUTE_CLOSURE_RULE_SOURCE = '现有项目参数；平原/山地和单位现行规范版本待业务复核';
-
-export const ROUTE_CLOSURE_RULES: Readonly<Record<LevelingGrade, ClosureRule>> = Object.freeze({
-  '3': Object.freeze({ distanceCoefficient: 12, stationCoefficient: 4, useStationFormulaAlways: false }),
-  '4': Object.freeze({ distanceCoefficient: 20, stationCoefficient: 6, useStationFormulaAlways: false }),
-  out: Object.freeze({ distanceCoefficient: null, stationCoefficient: 3, useStationFormulaAlways: true }),
-});
+export { ROUTE_CLOSURE_RULE_SOURCE };
+export const ROUTE_CLOSURE_RULES = DEFAULT_LEVELING_RULE_PROFILE.closureRules;
 
 export interface RouteClosureResult {
   totalDeltaHeight: number | null;
@@ -75,9 +66,10 @@ export function calculateAllowableError(
   grade: LevelingGrade,
   totalDistanceKm: number,
   stationCount: number,
+  ruleProfile?: LevelingRuleProfile | RuleProfileSnapshot,
 ): number | null {
   if (stationCount <= 0 || !Number.isFinite(totalDistanceKm) || totalDistanceKm < 0) return null;
-  const rule = ROUTE_CLOSURE_RULES[grade];
+  const rule = (ruleProfile ?? DEFAULT_LEVELING_RULE_PROFILE).closureRules[grade];
   const stationsPerKm = totalDistanceKm > 0 ? stationCount / totalDistanceKm : Number.MAX_SAFE_INTEGER;
   if (rule.useStationFormulaAlways || stationsPerKm > 16 || rule.distanceCoefficient === null) {
     return rule.stationCoefficient * Math.sqrt(stationCount);
@@ -137,7 +129,7 @@ export function recalculateLevelingRoute(inputRoute: LevelingRoute): LevelingRou
     const backPointName = station.readings.backPoint.trim();
     const hasContinuityError = index > 0 && !isSamePoint(previousForePointName, backPointName);
     const stationBaseElevation = hasContinuityError ? null : previousElevation;
-    let result = processStation(station, inputRoute.grade, previousAccumulatedDiff, stationBaseElevation);
+    let result = processStation(station, inputRoute.grade, previousAccumulatedDiff, stationBaseElevation, inputRoute.ruleProfileSnapshot);
     if (hasContinuityError) {
       const message = `第 ${index + 1} 站后视点“${backPointName || '未命名'}”与上一站前视点“${previousForePointName || '未命名'}”不连续`;
       continuityErrors.push(message);
@@ -202,7 +194,7 @@ export function recalculateLevelingRoute(inputRoute: LevelingRoute): LevelingRou
 
   const allowableErrorMm = inputRoute.routeType === 'open'
     ? null
-    : calculateAllowableError(inputRoute.grade, cumulativeDistanceKm, processedStations.length);
+    : calculateAllowableError(inputRoute.grade, cumulativeDistanceKm, processedStations.length, inputRoute.ruleProfileSnapshot);
   const isWithinTolerance = closureErrorMm !== null && allowableErrorMm !== null
     ? Math.abs(closureErrorMm) <= allowableErrorMm
     : null;

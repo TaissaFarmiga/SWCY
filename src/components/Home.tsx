@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Activity, Gauge, Ruler, Waves } from 'lucide-react';
+import { Activity, Database, Gauge, HelpCircle, Ruler, Waves } from 'lucide-react';
 import type { AppModule } from '../types/navigation';
 import { AppUpdate } from './AppUpdate';
 
@@ -9,7 +9,7 @@ interface HomeProps {
 
 export function Home({ onSelect }: HomeProps) {
   return (
-    <main className="relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden px-3 pb-safe pt-safe min-[360px]:px-5">
+    <main data-testid="home-screen" className="app-safe-screen relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col overflow-hidden px-3 pb-safe min-[360px]:px-5">
       <div className="absolute top-1/4 -left-10 w-48 h-48 bg-cyan-400/20 dark:bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 -right-10 w-48 h-48 bg-blue-500/20 dark:bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -26,6 +26,7 @@ export function Home({ onSelect }: HomeProps) {
             initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
             onClick={() => onSelect('flow')}
+            data-testid="home-flow"
             className="group relative min-h-[88px] w-full rounded-3xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_8px_32px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-gray-700/80 dark:bg-gray-800/60"
           >
             <div className="relative z-10 flex items-center gap-3">
@@ -42,6 +43,7 @@ export function Home({ onSelect }: HomeProps) {
             initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
             whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
             onClick={() => onSelect('leveling')}
+            data-testid="home-leveling"
             className="group relative min-h-[88px] w-full rounded-3xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_8px_32px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-gray-700/80 dark:bg-gray-800/60"
           >
             <div className="relative z-10 flex items-center gap-3">
@@ -81,7 +83,31 @@ export function Home({ onSelect }: HomeProps) {
             <strong className="block text-sm text-slate-800 dark:text-slate-100">电子气泡</strong>
             <span className="mt-1 block text-[10px] leading-4 text-slate-500 dark:text-slate-400">水准尺垂直度辅助校验</span>
           </motion.button>
+
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onSelect('governance')}
+            data-testid="home-governance"
+            className="col-span-2 min-h-[88px] rounded-3xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_8px_28px_rgba(0,0,0,0.05)] backdrop-blur-xl dark:border-gray-700/80 dark:bg-gray-800/60"
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"><Database className="h-5 w-5" /></span>
+              <span className="min-w-0">
+                <strong className="block text-sm text-slate-800 dark:text-slate-100">数据治理与备份</strong>
+                <span className="mt-1 block text-[10px] leading-4 text-slate-500 dark:text-slate-400">仪器档案、规则来源、成果审计与完整备份</span>
+              </span>
+            </span>
+          </motion.button>
         </div>
+      </section>
+
+      <section className="relative z-10 pb-3" aria-label="帮助和法律信息">
+        <button type="button" data-testid="home-app-info" onClick={() => onSelect('app-info')} className="flex min-h-12 w-full items-center gap-3 rounded-2xl border border-white/80 bg-white/55 px-3 text-left shadow-[0_6px_20px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-gray-700/80 dark:bg-gray-800/55">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-gray-700 dark:text-slate-200"><HelpCircle className="h-4 w-4" /></span>
+          <span className="min-w-0 flex-1"><strong className="block text-xs text-slate-700 dark:text-slate-100">帮助、隐私与关于</strong><span className="block text-[10px] text-slate-400">使用说明 · 用户协议 · v{__APP_VERSION__}</span></span>
+        </button>
       </section>
 
       <AppUpdate />

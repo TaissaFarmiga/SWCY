@@ -10,17 +10,62 @@ import com.hydro.geekterminal.plugin.SnapshotPlugin;
 import java.io.File;
 import java.io.FileInputStream;
 import android.util.Log;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends BridgeActivity {
 
     // 暴露给前端 Plugin 调用的静态变量，用于动态切换路径
     public static String snapshotBasePath = null;
 
+    /** Read-only test/accessibility surface; keeps Bridge ownership inside Activity. */
+    public WebView getBridgeWebView() {
+        return this.bridge.getWebView();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         // Register custom SnapshotPlugin before the bridge is created
         registerPlugin(SnapshotPlugin.class);
         super.onCreate(savedInstanceState);
+        installSystemBarInsets();
+    }
+
+    /**
+     * Android 16 enforces edge-to-edge for targetSdk 36. Keep the WebView background
+     * immersive while moving interactive web content below status bars and display
+     * cutouts. The handled top/side insets are consumed so CSS safe-area values do
+     * not add the same space a second time.
+     */
+    private void installSystemBarInsets() {
+        WebView webView = this.bridge.getWebView();
+        final int initialLeft = webView.getPaddingLeft();
+        final int initialTop = webView.getPaddingTop();
+        final int initialRight = webView.getPaddingRight();
+        final int initialBottom = webView.getPaddingBottom();
+
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
+            Insets statusBars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
+            Insets displayCutout = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout());
+
+            int safeLeft = Math.max(statusBars.left, displayCutout.left);
+            int safeTop = Math.max(statusBars.top, displayCutout.top);
+            int safeRight = Math.max(statusBars.right, displayCutout.right);
+
+            view.setPadding(
+                initialLeft + safeLeft,
+                initialTop + safeTop,
+                initialRight + safeRight,
+                initialBottom
+            );
+
+            return new WindowInsetsCompat.Builder(windowInsets)
+                .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.NONE)
+                .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.NONE)
+                .build();
+        });
+        ViewCompat.requestApplyInsets(webView);
     }
 
     @Override

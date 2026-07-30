@@ -1,4 +1,5 @@
 import groovy.json.JsonSlurper
+import java.util.Properties
 
 // ============================================================
 // 防御性动态版本解析 —— 从根目录 package.json 提取版本号
@@ -37,11 +38,31 @@ if (extPackageJson != null && extPackageJson.version != null) {
 
 println("Dynamic version: versionName=${computedVersionName}, versionCode=${computedVersionCode}")
 
+def releaseProperties = new Properties()
+def releasePropertiesFile = rootProject.file('keystore.properties')
+if (releasePropertiesFile.exists()) {
+    releasePropertiesFile.withInputStream { releaseProperties.load(it) }
+}
+
+def releaseSetting = { String propertyName, String environmentName ->
+    def propertyValue = releaseProperties.getProperty(propertyName)
+    return propertyValue?.trim() ? propertyValue.trim() : System.getenv(environmentName)?.trim()
+}
+
+def releaseStorePath = releaseSetting('storeFile', 'HYDRO_KEYSTORE_PATH')
+def releaseStorePassword = releaseSetting('storePassword', 'HYDRO_KEYSTORE_PASSWORD')
+def releaseKeyAlias = releaseSetting('keyAlias', 'HYDRO_KEY_ALIAS')
+def releaseKeyPassword = releaseSetting('keyPassword', 'HYDRO_KEY_PASSWORD')
+def releaseSigningAvailable = [releaseStorePath, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it }
+
 apply plugin: 'com.android.application'
 
 android {
     namespace = "com.hydro.geekterminal"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "com.hydro.geekterminal"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -55,11 +76,57 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    flavorDimensions += "distribution"
+    productFlavors {
+        enterprise {
+            dimension "distribution"
+        }
+        store {
+            dimension "distribution"
+            applicationIdSuffix ".store"
+        }
+        smoke {
+            dimension "distribution"
+            applicationIdSuffix ".smoke"
+        }
+    }
+    signingConfigs {
+        release {
+            if (releaseSigningAvailable) {
+                storeFile rootProject.file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
+        debug { }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseSigningAvailable) signingConfig signingConfigs.release
         }
+    }
+    testOptions {
+        managedDevices {
+            devices {
+                pixel2Api35(com.android.build.api.dsl.ManagedVirtualDevice) {
+                    device = "Pixel 2"
+                    apiLevel = 35
+                    systemImageSource = "aosp-atd"
+                }
+            }
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releaseBuildRequested = graph.allTasks.any { task ->
+        task.project == project && task.name ==~ /(?i)(assemble|bundle).+Release/
+    }
+    if (releaseBuildRequested && !releaseSigningAvailable) {
+        throw new GradleException('正式构建缺少签名配置。请设置 HYDRO_KEYSTORE_PATH、HYDRO_KEYSTORE_PASSWORD、HYDRO_KEY_ALIAS、HYDRO_KEY_PASSWORD，或创建未跟踪的 android/keystore.properties。')
     }
 }
 
@@ -78,6 +145,10 @@ dependencies {
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-web:$androidxEspressoCoreVersion"
+    androidTestImplementation "androidx.test:core:1.6.1"
+    androidTestImplementation "androidx.test:rules:1.6.1"
+    androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
     implementation project(':capacitor-cordova-android-plugins')
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
 }

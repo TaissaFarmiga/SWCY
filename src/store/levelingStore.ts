@@ -1,7 +1,5 @@
-import { Capacitor } from '@capacitor/core';
-import { Preferences } from '@capacitor/preferences';
 import { create } from 'zustand';
-import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   IntermediateReading,
   KnownPoint,
@@ -16,6 +14,9 @@ import { LEVELING_SCHEMA_VERSION } from '../types/leveling';
 import { createEmptyStationResult } from '../lib/LevelingEngine';
 import { createEmptyRouteCalculation, recalculateLevelingRoute } from '../lib/RouteClosureEngine';
 import { hasValidCoordinates } from '../lib/levelingVisuals';
+import { createPlatformStateStorage } from '../lib/persistence';
+import { DEFAULT_LEVELING_RULE_PROFILE, createRuleProfileSnapshot, normalizeRuleProfileSnapshot } from '../lib/levelingRules';
+import { normalizeInstrumentSnapshot, useGovernanceStore } from './governanceStore';
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -66,65 +67,6 @@ function normalizeDirection(value: unknown, fallback: SurveyDirection = 'forward
   return value === 'return' || value === 'forward' ? value : fallback;
 }
 
-function createLevelingStorage(): StateStorage {
-  const localGet = (name: string): string | null => {
-    if (typeof localStorage === 'undefined') return null;
-    try {
-      return localStorage.getItem(name);
-    } catch (error) {
-      console.warn('[levelingStore] 浏览器存储读取失败', error);
-      return null;
-    }
-  };
-  const localSet = (name: string, value: string): void => {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.setItem(name, value);
-    } catch (error) {
-      console.warn('[levelingStore] 浏览器存储写入失败', error);
-    }
-  };
-  const localRemove = (name: string): void => {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.removeItem(name);
-    } catch (error) {
-      console.warn('[levelingStore] 浏览器存储删除失败', error);
-    }
-  };
-
-  return {
-    getItem: async (name) => {
-      if (!Capacitor.isNativePlatform()) return localGet(name);
-      try {
-        const { value } = await Preferences.get({ key: name });
-        return value ?? localGet(name);
-      } catch (error) {
-        console.warn('[levelingStore] Preferences 读取失败，回退浏览器存储', error);
-        return localGet(name);
-      }
-    },
-    setItem: async (name, value) => {
-      localSet(name, value);
-      if (!Capacitor.isNativePlatform()) return;
-      try {
-        await Preferences.set({ key: name, value });
-      } catch (error) {
-        console.warn('[levelingStore] Preferences 写入失败', error);
-      }
-    },
-    removeItem: async (name) => {
-      localRemove(name);
-      if (!Capacitor.isNativePlatform()) return;
-      try {
-        await Preferences.remove({ key: name });
-      } catch (error) {
-        console.warn('[levelingStore] Preferences 删除失败', error);
-      }
-    },
-  };
-}
-
 export function createEmptyLevelingReadings(): LevelingReadings {
   return {
     backPoint: '',
@@ -171,7 +113,11 @@ export function createEmptyLevelingRoute(grade: LevelingGrade = '4'): LevelingRo
     routeType: 'attached',
     direction: 'forward',
     completionStatus: 'draft',
+    revision: 0,
     instrument: '',
+    instrumentProfileId: 'unregistered-level',
+    ruleProfileId: DEFAULT_LEVELING_RULE_PROFILE.id,
+    ruleProfileSnapshot: createRuleProfileSnapshot(),
     location: '',
     staffNumber: '',
     waterLevel: '',
@@ -275,6 +221,11 @@ function normalizeRouteType(value: unknown, fallback: LevelingRouteType): Leveli
     : fallback;
 }
 
+function normalizeCompletionStatus(value: unknown): LevelingRoute['completionStatus'] {
+  return value === 'completed' || value === 'pending_review' || value === 'reviewed'
+    || value === 'archived' || value === 'revision' ? value : 'draft';
+}
+
 export function normalizeLevelingRoute(value: unknown): LevelingRoute {
   const source = isRecord(value) ? value : {};
   const grade = normalizeGrade(source.grade);
@@ -296,8 +247,22 @@ export function normalizeLevelingRoute(value: unknown): LevelingRoute {
     grade,
     routeType: normalizeRouteType(source.routeType, inferredType),
     direction,
-    completionStatus: source.completionStatus === 'completed' ? 'completed' : 'draft',
+    completionStatus: normalizeCompletionStatus(source.completionStatus),
+    revision: typeof source.revision === 'number' && Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
     instrument: asString(source.instrument),
+    instrumentProfileId: asOptionalString(source.instrumentProfileId) ?? 'unregistered-level',
+    instrumentSnapshot: normalizeInstrumentSnapshot(source.instrumentSnapshot),
+    ruleProfileId: asString(source.ruleProfileId) || base.ruleProfileId,
+    ruleProfileSnapshot: normalizeRuleProfileSnapshot(source.ruleProfileSnapshot),
+    taskNumber: asOptionalString(source.taskNumber),
+    organization: asOptionalString(source.organization),
+    surveyor: asOptionalString(source.surveyor),
+    checker: asOptionalString(source.checker),
+    backStaffNumber: asOptionalString(source.backStaffNumber),
+    foreStaffNumber: asOptionalString(source.foreStaffNumber),
+    weather: asOptionalString(source.weather),
+    terrain: asOptionalString(source.terrain),
+    notes: asOptionalString(source.notes),
     location: asOptionalString(source.location),
     staffNumber: asOptionalString(source.staffNumber),
     waterLevel: asOptionalString(source.waterLevel),
@@ -321,6 +286,39 @@ function deepCloneRoute(route: LevelingRoute): LevelingRoute {
   return JSON.parse(JSON.stringify(route)) as LevelingRoute;
 }
 
+function applySelectedLevelingInstrument(route: LevelingRoute): LevelingRoute {
+  const governance = useGovernanceStore.getState();
+  const instrumentProfileId = governance.selectedLevelingInstrumentId;
+  const instrumentSnapshot = governance.captureInstrument(instrumentProfileId);
+  return {
+    ...route,
+    instrumentProfileId,
+    instrumentSnapshot,
+    instrument: instrumentSnapshot?.name ?? route.instrument,
+  };
+}
+
+function createConfiguredRoute(grade: LevelingGrade): LevelingRoute {
+  return applySelectedLevelingInstrument(createEmptyLevelingRoute(grade));
+}
+
+function prepareEditableRoute(route: LevelingRoute): LevelingRoute {
+  if (route.completionStatus === 'draft' || route.completionStatus === 'revision') return route;
+  const revised: LevelingRoute = {
+    ...deepCloneRoute(route),
+    id: generateUUID(),
+    parentId: route.id,
+    completionStatus: 'revision',
+    revision: route.revision + 1,
+    completedAt: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+  useGovernanceStore.getState().recordAudit({
+    module: 'leveling', recordId: route.id, action: 'revise', before: route, after: revised,
+  });
+  return revised;
+}
+
 function sanitizeFilename(value: string): string {
   const invalid = '<>:"/\\|?*';
   const cleaned = Array.from(value, (character) => invalid.includes(character) || character.charCodeAt(0) < 32 ? '_' : character)
@@ -330,7 +328,7 @@ function sanitizeFilename(value: string): string {
   return cleaned || '水准测量';
 }
 
-interface PersistedLevelingState {
+export interface PersistedLevelingState {
   currentRoute: LevelingRoute;
   routes: LevelingRoute[];
   isDirty: boolean;
@@ -368,6 +366,8 @@ export interface LevelingState {
   removeIntermediate: (stationId: string, intermediateId: string) => void;
   commitRoute: (mode: 'overwrite' | 'new') => void;
   completeRoute: () => void;
+  applySelectedInstrument: () => void;
+  transitionRouteStatus: (status: 'pending_review' | 'reviewed' | 'archived') => void;
   loadRoute: (routeId: string) => void;
   exportCurrentRouteJSON: () => void;
   exportData: () => Promise<void>;
@@ -378,12 +378,12 @@ export interface LevelingState {
   revertCurrentRoute: () => void;
 }
 
-const storage = createLevelingStorage();
+const storage = createPlatformStateStorage();
 
 export const useLevelingStore = create<LevelingState>()(
   persist(
     (set, get) => ({
-      currentRoute: createEmptyLevelingRoute('4'),
+      currentRoute: createConfiguredRoute('4'),
       routes: [],
       isDirty: false,
       hasHydrated: false,
@@ -394,8 +394,9 @@ export const useLevelingStore = create<LevelingState>()(
       toggleHistoryPanel: () => set((state) => ({ showHistoryPanel: !state.showHistoryPanel })),
       markTime: (type) => set((state) => {
         const now = new Date().toISOString();
+        const editable = prepareEditableRoute(state.currentRoute);
         const route = {
-          ...state.currentRoute,
+          ...editable,
           [type === 'start' ? 'startTime' : 'endTime']: now,
           ...(type === 'start' ? { createdAt: now } : {}),
         };
@@ -405,43 +406,52 @@ export const useLevelingStore = create<LevelingState>()(
       revertCurrentRoute: () => set((state) => {
         const original = state.routes.find((route) => route.id === state.currentRoute.id || route.id === state.currentRoute.parentId);
         return {
-          currentRoute: original ? recalculateLevelingRoute(deepCloneRoute(original)) : createEmptyLevelingRoute(state.currentRoute.grade),
+          currentRoute: original ? recalculateLevelingRoute(deepCloneRoute(original)) : createConfiguredRoute(state.currentRoute.grade),
           isDirty: false,
         };
       }),
-      createRoute: (grade) => set({ currentRoute: createEmptyLevelingRoute(grade), isDirty: false, lastAddedStationId: null }),
-      updateRouteMeta: (updates) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({ ...state.currentRoute, ...updates, completionStatus: 'draft' }),
-        isDirty: true,
-      })),
+      createRoute: (grade) => set({ currentRoute: createConfiguredRoute(grade), isDirty: false, lastAddedStationId: null }),
+      updateRouteMeta: (updates) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({ ...editable, ...updates }),
+          isDirty: true,
+        };
+      }),
       addKnownPoint: (insertAfterId) => set((state) => {
-        const points = [...state.currentRoute.knownPoints];
+        const editable = prepareEditableRoute(state.currentRoute);
+        const points = [...editable.knownPoints];
         const newPoint: KnownPoint = { id: generateUUID(), name: '', elevation: null };
         const index = insertAfterId ? points.findIndex((point) => point.id === insertAfterId) : -1;
         if (index >= 0) points.splice(index + 1, 0, newPoint);
         else points.push(newPoint);
-        return { currentRoute: recalculateLevelingRoute({ ...state.currentRoute, knownPoints: points }), isDirty: true };
+        return { currentRoute: recalculateLevelingRoute({ ...editable, knownPoints: points }), isDirty: true };
       }),
       updateKnownPoint: (id, field, value) => set((state) => {
-        const points = state.currentRoute.knownPoints.map((point) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        const points = editable.knownPoints.map((point) => {
           if (point.id !== id) return point;
           if (field === 'elevation' || field === 'lat' || field === 'lng') {
             return { ...point, [field]: asFiniteNumber(value) };
           }
           return { ...point, [field]: asString(value) };
         });
-        return { currentRoute: recalculateLevelingRoute({ ...state.currentRoute, knownPoints: points }), isDirty: true };
+        return { currentRoute: recalculateLevelingRoute({ ...editable, knownPoints: points }), isDirty: true };
       }),
-      removeKnownPoint: (id) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          knownPoints: state.currentRoute.knownPoints.filter((point) => point.id !== id),
-        }),
-        isDirty: true,
-      })),
+      removeKnownPoint: (id) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            knownPoints: editable.knownPoints.filter((point) => point.id !== id),
+          }),
+          isDirty: true,
+        };
+      }),
       addStation: (insertAfterId, lat, lng) => set((state) => {
-        const stations = [...state.currentRoute.stations];
-        const station = createEmptyLevelingStation(0, state.currentRoute.direction, lat, lng);
+        const editable = prepareEditableRoute(state.currentRoute);
+        const stations = [...editable.stations];
+        const station = createEmptyLevelingStation(0, editable.direction, lat, lng);
         const insertIndex = insertAfterId ? stations.findIndex((item) => item.id === insertAfterId) : -1;
         if (insertIndex >= 0) {
           station.readings.backPoint = stations[insertIndex].readings.forePoint;
@@ -452,40 +462,51 @@ export const useLevelingStore = create<LevelingState>()(
         }
         const ordered = stations.map((item, index) => ({ ...item, stationNumber: index + 1 }));
         return {
-          currentRoute: recalculateLevelingRoute({ ...state.currentRoute, stations: ordered }),
+          currentRoute: recalculateLevelingRoute({ ...editable, stations: ordered }),
           isDirty: true,
           lastAddedStationId: station.id,
         };
       }),
-      setStationDirection: (stationId, direction) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations.map((station) => station.id === stationId ? { ...station, direction } : station),
-        }),
-        isDirty: true,
-      })),
-      updateStationReading: (stationId, updates) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations.map((station) => station.id === stationId
-            ? { ...station, readings: { ...station.readings, ...updates } }
-            : station),
-        }),
-        isDirty: true,
-      })),
-      deleteStation: (stationId) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations
-            .filter((station) => station.id !== stationId)
-            .map((station, index) => ({ ...station, stationNumber: index + 1 })),
-        }),
-        isDirty: true,
-      })),
-      addIntermediate: (stationId) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations.map((station) => station.id === stationId
+      setStationDirection: (stationId, direction) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            stations: editable.stations.map((station) => station.id === stationId ? { ...station, direction } : station),
+          }),
+          isDirty: true,
+        };
+      }),
+      updateStationReading: (stationId, updates) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            stations: editable.stations.map((station) => station.id === stationId
+              ? { ...station, readings: { ...station.readings, ...updates } }
+              : station),
+          }),
+          isDirty: true,
+        };
+      }),
+      deleteStation: (stationId) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            stations: editable.stations
+              .filter((station) => station.id !== stationId)
+              .map((station, index) => ({ ...station, stationNumber: index + 1 })),
+          }),
+          isDirty: true,
+        };
+      }),
+      addIntermediate: (stationId) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+          ...editable,
+          stations: editable.stations.map((station) => station.id === stationId
             ? {
                 ...station,
                 readings: {
@@ -494,13 +515,16 @@ export const useLevelingStore = create<LevelingState>()(
                 },
               }
             : station),
-        }),
-        isDirty: true,
-      })),
-      updateIntermediate: (stationId, intermediateId, field, value) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations.map((station) => station.id === stationId
+          }),
+          isDirty: true,
+        };
+      }),
+      updateIntermediate: (stationId, intermediateId, field, value) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+          ...editable,
+          stations: editable.stations.map((station) => station.id === stationId
             ? {
                 ...station,
                 readings: {
@@ -511,13 +535,16 @@ export const useLevelingStore = create<LevelingState>()(
                 },
               }
             : station),
-        }),
-        isDirty: true,
-      })),
-      removeIntermediate: (stationId, intermediateId) => set((state) => ({
-        currentRoute: recalculateLevelingRoute({
-          ...state.currentRoute,
-          stations: state.currentRoute.stations.map((station) => station.id === stationId
+          }),
+          isDirty: true,
+        };
+      }),
+      removeIntermediate: (stationId, intermediateId) => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute({
+          ...editable,
+          stations: editable.stations.map((station) => station.id === stationId
             ? {
                 ...station,
                 readings: {
@@ -526,9 +553,10 @@ export const useLevelingStore = create<LevelingState>()(
                 },
               }
             : station),
-        }),
-        isDirty: true,
-      })),
+          }),
+          isDirty: true,
+        };
+      }),
       commitRoute: (mode) => set((state) => {
         const now = new Date().toISOString();
         const recalculated = recalculateLevelingRoute({ ...state.currentRoute, updatedAt: now });
@@ -547,7 +575,7 @@ export const useLevelingStore = create<LevelingState>()(
         const committed = recalculateLevelingRoute({
           ...recalculated,
           id,
-          parentId: id,
+          parentId: recalculated.completionStatus === 'revision' ? recalculated.parentId : undefined,
           createdAt: now,
           updatedAt: now,
         });
@@ -556,14 +584,44 @@ export const useLevelingStore = create<LevelingState>()(
       completeRoute: () => set((state) => {
         if (!state.currentRoute.calculation.isComplete) return state;
         const now = new Date().toISOString();
-        return {
-          currentRoute: recalculateLevelingRoute({
+        const completed = recalculateLevelingRoute(applySelectedLevelingInstrument({
             ...state.currentRoute,
             completionStatus: 'completed',
             completedAt: now,
             endTime: state.currentRoute.endTime ?? now,
-          }),
+            updatedAt: now,
+          }));
+        useGovernanceStore.getState().recordAudit({
+          module: 'leveling', recordId: completed.id, action: 'complete', reason: '完成水准成果', before: state.currentRoute, after: completed,
+        });
+        const snapshot = deepCloneRoute(completed);
+        return {
+          currentRoute: deepCloneRoute(snapshot),
+          routes: state.routes.some((route) => route.id === snapshot.id)
+            ? state.routes.map((route) => route.id === snapshot.id ? snapshot : route)
+            : [snapshot, ...state.routes],
+          isDirty: false,
+        };
+      }),
+      applySelectedInstrument: () => set((state) => {
+        const editable = prepareEditableRoute(state.currentRoute);
+        return {
+          currentRoute: recalculateLevelingRoute(applySelectedLevelingInstrument(editable)),
           isDirty: true,
+        };
+      }),
+      transitionRouteStatus: (status) => set((state) => {
+        if (state.currentRoute.completionStatus === 'draft' || state.currentRoute.completionStatus === 'revision') return state;
+        const before = state.currentRoute;
+        const after = recalculateLevelingRoute({ ...before, completionStatus: status, updatedAt: new Date().toISOString() });
+        useGovernanceStore.getState().recordAudit({
+          module: 'leveling', recordId: before.id, action: status === 'archived' ? 'archive' : 'review', before, after,
+        });
+        const snapshot = deepCloneRoute(after);
+        return {
+          currentRoute: deepCloneRoute(snapshot),
+          routes: state.routes.map((route) => route.id === snapshot.id ? snapshot : route),
+          isDirty: false,
         };
       }),
       loadRoute: (routeId) => set((state) => {
@@ -612,7 +670,10 @@ export const useLevelingStore = create<LevelingState>()(
       migrate: (persistedState) => migrateLevelingPersistedState(persistedState),
       partialize: (state) => ({ currentRoute: state.currentRoute, routes: state.routes, isDirty: state.isDirty }),
       onRehydrateStorage: () => (state, error) => {
-        if (error) console.error('[levelingStore] 持久化数据恢复失败', error);
+        if (error) {
+          console.error('[levelingStore] 持久化数据恢复失败', error);
+          useGovernanceStore.getState().recordDiagnostic('persistence');
+        }
         state?.setHasHydrated(true);
       },
     },

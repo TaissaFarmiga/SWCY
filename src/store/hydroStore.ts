@@ -13,14 +13,16 @@
  */
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { Preferences } from '@capacitor/preferences';
-import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula } from '../types';
+import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula, HYDRO_SCHEMA_VERSION } from '../types';
 import { createNewRun, createMeasureVertical, processRun, createDefaultMeasurePoints } from '../lib/HydroEngine';
 import { DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT } from '../types';
 import { downloadExcel } from '../lib/exportExcel';
+import { markHydroRunTime, normalizeRunTimestamps } from '../lib/hydroTiming';
+import { createPlatformStateStorage } from '../lib/persistence';
+import { normalizeInstrumentSnapshot, useGovernanceStore } from './governanceStore';
+import type { RecordLifecycleStatus } from '../types/governance';
 
 const STORAGE_KEY = 'hydrology-data';
 const TEMPLATES_KEY = 'hydrology-templates';
@@ -59,6 +61,7 @@ export interface SectionTemplate {
 
 interface HydroState {
   currentRun: Run; runs: Run[]; expandedVerticalIds: Set<string>; lastAddedVerticalId: string | null;
+  templates: SectionTemplate[];
   /** 水合完成标志：防止 Capacitor 原生端白屏闪烁 */
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
@@ -71,7 +74,7 @@ interface HydroState {
   /** 彻底清空当前工作区数据，不归档，直接重置为空白测次 */
   discardRun: () => void;
   updateRun: (u: Partial<Run>) => void;
-  updateRunMeta: (rid: string, k: 'waterLevel' | 'location' | 'startTime' | 'endTime' | 'duration' | 'timestamp', v: string) => void;
+  updateRunMeta: (rid: string, k: 'waterLevel' | 'location' | 'startTime' | 'endTime' | 'duration' | 'timestamp' | 'stationCode' | 'riverName' | 'operator' | 'recorder' | 'reviewer' | 'weather' | 'waterCondition' | 'notes', v: string) => void;
   updateMeterFormula: (f: MeterFormula) => void;
   deleteRun: (rid: string) => void;
   loadRun: (rid: string) => void;
@@ -86,11 +89,14 @@ interface HydroState {
   swapEdges: () => void;
   swapEdgeCoefficients: () => void;
   setLastAddedVerticalId: (id: string | null) => void;
-  recalculate: () => void;
+  recalculate: (allowRevision?: boolean) => void;
   exportData: () => Promise<void>;
   exportCurrentRunJSON: () => void;
   getProcessedRun: () => Run;
   markTime: (type: 'start' | 'end') => void;
+  applySelectedInstrument: () => void;
+  completeCurrentRun: () => boolean;
+  transitionRecordStatus: (status: 'pending_review' | 'reviewed' | 'archived') => void;
   importBackup: (backupData: unknown) => void;
   /** 工作台隔离机制 */
   isDirty: boolean;
@@ -100,6 +106,7 @@ interface HydroState {
   saveTemplate: () => SectionTemplate;
   deleteTemplate: (id: string) => void;
   loadTemplate: (template: SectionTemplate) => void;
+  migrateLegacyTemplates: () => Promise<void>;
 }
 
 /** 无损继承：按 relativeDepth 将旧测点中的用户录入数据合并到新模板点中 */
@@ -197,7 +204,7 @@ function normalizeVertical(value: unknown, index: number): Vertical | null {
   };
 }
 
-function normalizeImportedRun(value: unknown): Run | null {
+export function normalizeImportedRun(value: unknown): Run | null {
   if (!isRecord(value) || !Array.isArray(value.verticals)) return null;
   const flowPeriod: FlowPeriod = value.flowPeriod === 'ice' ? 'ice' : 'open';
   const base = createNewRun(1, flowPeriod);
@@ -216,8 +223,9 @@ function normalizeImportedRun(value: unknown): Run | null {
     || value.defaultSamplerType === 'other'
     ? value.defaultSamplerType
     : undefined;
-  return {
+  return normalizeRunTimestamps({
     ...base,
+    schemaVersion: HYDRO_SCHEMA_VERSION,
     id: stringValue(value.id, crypto.randomUUID()),
     parentId: optionalString(value.parentId),
     runNumber: stringValue(value.runNumber, '1'),
@@ -229,6 +237,24 @@ function normalizeImportedRun(value: unknown): Run | null {
     waterLevel: optionalString(value.waterLevel),
     location: optionalString(value.location),
     meterFormula,
+    meterFormulaSnapshot: isRecord(value.meterFormulaSnapshot)
+      && typeof value.meterFormulaSnapshot.k === 'number' && Number.isFinite(value.meterFormulaSnapshot.k)
+      && typeof value.meterFormulaSnapshot.c === 'number' && Number.isFinite(value.meterFormulaSnapshot.c)
+      ? { k: value.meterFormulaSnapshot.k, c: value.meterFormulaSnapshot.c }
+      : { ...meterFormula },
+    instrumentProfileId: optionalString(value.instrumentProfileId) ?? 'unregistered-flow-meter',
+    instrumentSnapshot: normalizeInstrumentSnapshot(value.instrumentSnapshot),
+    recordStatus: recordStatus(value.recordStatus),
+    revision: typeof value.revision === 'number' && Number.isInteger(value.revision) && value.revision >= 0 ? value.revision : 0,
+    completedAt: optionalString(value.completedAt),
+    stationCode: optionalString(value.stationCode),
+    riverName: optionalString(value.riverName),
+    operator: optionalString(value.operator),
+    recorder: optionalString(value.recorder),
+    reviewer: optionalString(value.reviewer),
+    weather: optionalString(value.weather),
+    waterCondition: optionalString(value.waterCondition),
+    notes: optionalString(value.notes),
     sedimentEnabled: typeof value.sedimentEnabled === 'boolean' ? value.sedimentEnabled : undefined,
     defaultSamplerType,
     defaultSampleVolume: optionalString(value.defaultSampleVolume),
@@ -242,37 +268,115 @@ function normalizeImportedRun(value: unknown): Run | null {
     meanSedimentConc: optionalString(value.meanSedimentConc),
     startTime: optionalString(value.startTime),
     endTime: optionalString(value.endTime),
+    startAt: optionalString(value.startAt),
+    endAt: optionalString(value.endAt),
     duration: optionalString(value.duration),
+  });
+}
+
+function recordStatus(value: unknown): RecordLifecycleStatus {
+  return value === 'completed' || value === 'pending_review' || value === 'reviewed'
+    || value === 'archived' || value === 'revision' ? value : 'draft';
+}
+
+function applySelectedFlowInstrument(run: Run): Run {
+  const governance = useGovernanceStore.getState();
+  const instrumentProfileId = governance.selectedFlowInstrumentId;
+  const instrumentSnapshot = governance.captureInstrument(instrumentProfileId);
+  const formula = instrumentSnapshot?.meterFormula ?? run.meterFormula ?? DEFAULT_METER_FORMULA;
+  return {
+    ...run,
+    instrumentProfileId,
+    instrumentSnapshot,
+    meterFormula: { ...formula },
+    meterFormulaSnapshot: { ...formula },
   };
 }
 
-/** 自定义跨端存储引擎：原生走 Capacitor Preferences，浏览器降级回 localStorage */
-const capacitorStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    if (Capacitor.isNativePlatform()) {
-      const { value } = await Preferences.get({ key: name });
-      return value;
-    }
-    return localStorage.getItem(name);
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    if (Capacitor.isNativePlatform()) {
-      await Preferences.set({ key: name, value });
-    } else {
-      localStorage.setItem(name, value);
-    }
-  },
-  removeItem: async (name: string): Promise<void> => {
-    if (Capacitor.isNativePlatform()) {
-      await Preferences.remove({ key: name });
-    } else {
-      localStorage.removeItem(name);
-    }
-  },
-};
+function normalizeSectionTemplate(value: unknown): SectionTemplate | null {
+  if (!isRecord(value) || !Array.isArray(value.verticals)) return null;
+  const verticals = value.verticals.map((item, index): SectionTemplate['verticals'][number] | null => {
+    const vertical = normalizeVertical(item, index);
+    if (!vertical) return null;
+    return {
+      id: vertical.id,
+      type: vertical.type,
+      name: vertical.name,
+      verticalNumber: vertical.verticalNumber,
+      startDistance: vertical.startDistance,
+      measureMethod: vertical.measureMethod,
+      deflectionCoefficient: vertical.deflectionCoefficient,
+      shoreCoefficient: vertical.shoreCoefficient,
+      waterDepth: vertical.waterDepth,
+      iceThickness: '',
+      waterIceThickness: '',
+      iceFlowerThickness: '',
+      measurePoints: vertical.measurePoints.map((point) => ({
+        id: point.id,
+        relativeDepth: point.relativeDepth,
+        mode: point.mode,
+        velocity: '',
+        absoluteDepth: '',
+        n: '',
+        t: '',
+      })),
+    };
+  }).filter((item): item is SectionTemplate['verticals'][number] => item !== null);
+  if (verticals.length === 0) return null;
+  return {
+    id: stringValue(value.id, crypto.randomUUID()),
+    name: stringValue(value.name, '未命名断面'),
+    createdAt: typeof value.createdAt === 'number' && Number.isFinite(value.createdAt) ? value.createdAt : Date.now(),
+    leftBankCoefficient: stringValue(value.leftBankCoefficient, DEFAULT_SHORE_COEFFICIENT),
+    rightBankCoefficient: stringValue(value.rightBankCoefficient, DEFAULT_SHORE_COEFFICIENT),
+    verticals,
+  };
+}
+
+export interface PersistedHydroState {
+  currentRun: Run;
+  runs: Run[];
+  templates: SectionTemplate[];
+}
+
+export function migrateHydroPersistedState(value: unknown): PersistedHydroState {
+  const source = isRecord(value) ? value : {};
+  const currentRun = normalizeImportedRun(source.currentRun) ?? createNewRun(1, 'open');
+  const seen = new Set<string>();
+  const runs = (Array.isArray(source.runs) ? source.runs : [])
+    .map(normalizeImportedRun)
+    .filter((run): run is Run => run !== null)
+    .map((run) => {
+      if (!seen.has(run.id)) {
+        seen.add(run.id);
+        return run;
+      }
+      const repaired = { ...run, id: crypto.randomUUID() };
+      seen.add(repaired.id);
+      return repaired;
+    });
+  const templates = (Array.isArray(source.templates) ? source.templates : [])
+    .map(normalizeSectionTemplate)
+    .filter((template): template is SectionTemplate => template !== null);
+  return { currentRun, runs, templates };
+}
+
+async function readLegacyTemplates(): Promise<SectionTemplate[]> {
+  try {
+    const value = JSON.parse(await capacitorStorage.getItem(TEMPLATES_KEY) || '[]') as unknown;
+    return (Array.isArray(value) ? value : [])
+      .map(normalizeSectionTemplate)
+      .filter((template): template is SectionTemplate => template !== null);
+  } catch {
+    return [];
+  }
+}
+
+const capacitorStorage = createPlatformStateStorage();
 
 export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   currentRun: createNewRun(1, 'open'), runs: [], expandedVerticalIds: new Set(), lastAddedVerticalId: null,
+  templates: [],
   _hasHydrated: false,
   isDirty: false,
   setHasHydrated: (state) => set({ _hasHydrated: state }),
@@ -343,7 +447,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     }
     const newLocation = `未知断面${counter}`;
 
-    const newRun: Run = {
+    const newRun: Run = applySelectedFlowInstrument({
       ...createNewRun(nextNo, fp || s.currentRun.flowPeriod),
       id: crypto.randomUUID(), 
       timestamp: new Date().toISOString(),
@@ -352,7 +456,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       duration: '',
       location: newLocation,
       meterFormula: { ...(s.currentRun.meterFormula || DEFAULT_METER_FORMULA) },
-    };
+    });
 
     set({ currentRun: newRun, runs: newRuns, expandedVerticalIds: new Set(), lastAddedVerticalId: null, isDirty: false });
   },
@@ -366,13 +470,13 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     let counter = 1;
     while (s.runs.some(r => r.location === `未知断面${counter}`)) counter++;
     
-    const newRun: Run = {
+    const newRun: Run = applySelectedFlowInstrument({
       ...createNewRun(maxNo + 1, s.currentRun.flowPeriod),
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       location: `未知断面${counter}`,
       meterFormula: { ...(s.currentRun.meterFormula || DEFAULT_METER_FORMULA) },
-    };
+    });
     set({ currentRun: newRun, expandedVerticalIds: new Set(), lastAddedVerticalId: null });
   },
 
@@ -631,14 +735,39 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   /**
    * 【重构】工作台机制：重新计算仅更新当前工作区，打上脏标记，绝不自动污染历史记录
    */
-  recalculate: () => set(s => { 
+  recalculate: (allowRevision = true) => set(s => {
+    const locked = s.currentRun.recordStatus !== 'draft' && s.currentRun.recordStatus !== 'revision';
+    if (allowRevision && locked) {
+      const original = s.runs.find((run) => run.id === s.currentRun.id) ?? s.currentRun;
+      const revised = processRun({
+        ...s.currentRun,
+        id: crypto.randomUUID(),
+        parentId: original.id,
+        recordStatus: 'revision',
+        revision: (original.revision ?? 0) + 1,
+        completedAt: undefined,
+      });
+      useGovernanceStore.getState().recordAudit({
+        module: 'flow', recordId: original.id, action: 'revise', before: original, after: revised,
+      });
+      return { currentRun: revised, isDirty: true };
+    }
     const processed = processRun({ ...s.currentRun });
-    return { currentRun: processed, isDirty: true };
+    return { currentRun: processed, isDirty: allowRevision ? true : s.isDirty };
   }),
   
   commitCurrentRun: (mode) => set(s => {
     const snapshot = JSON.parse(JSON.stringify(s.currentRun));
     let newRuns = [...s.runs];
+
+    // 已锁定成果进入修订后，修订必须以新 ID 保存；父成果永不被覆盖。
+    if (snapshot.recordStatus === 'revision') {
+      const revision = snapshot as Run;
+      const existingIndex = newRuns.findIndex((run) => run.id === revision.id);
+      if (existingIndex >= 0) newRuns[existingIndex] = revision;
+      else newRuns.push(revision);
+      return { currentRun: JSON.parse(JSON.stringify(revision)) as Run, runs: newRuns, isDirty: false };
+    }
     
     if (mode === 'overwrite') {
       const targetId = snapshot.parentId || snapshot.id;
@@ -812,33 +941,52 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   getProcessedRun: () => processRun(get().currentRun),
 
   markTime: (type) => {
-    const s = get();
-    const now = new Date();
-    const fmt = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    if (type === 'start') {
-      // 联动更新 timestamp 为当前 ISO，供面板时间选择器使用
-      set({ currentRun: { ...s.currentRun, startTime: fmt, endTime: '', duration: '', timestamp: now.toISOString() } });
-      get().recalculate(); // 强制触发同步
-    } else {
-      const startStr = s.currentRun.startTime;
-      if (!startStr) return;
-      const yyyy = now.getFullYear();
-      const startMs = new Date(`${yyyy}/${startStr}`).getTime();
-      const endMs = now.getTime();
-      const diffMs = Math.max(0, endMs - startMs);
-      
-      const h = Math.floor(diffMs / 3600000).toString().padStart(2, '0');
-      const m = Math.floor((diffMs % 3600000) / 60000).toString().padStart(2, '0');
-      
-      set({ currentRun: { ...s.currentRun, endTime: fmt, duration: `${h}小时${m}分` } });
-      get().recalculate(); // 强制触发同步
-      
-      setTimeout(() => {
-        const state = useHydroStore.getState();
-        localStorage.setItem('hydrology-data', JSON.stringify({ state, version: 0 }));
-      }, 100);
-    }
+    const currentRun = markHydroRunTime(get().currentRun, type);
+    if (currentRun === get().currentRun) return;
+    set({ currentRun, isDirty: true });
+    get().recalculate();
+  },
+
+  applySelectedInstrument: () => {
+    set((state) => ({ currentRun: applySelectedFlowInstrument(state.currentRun), isDirty: true }));
+    get().recalculate();
+  },
+
+  completeCurrentRun: () => {
+    const state = get();
+    const processed = processRun(state.currentRun);
+    if (!processed.totalDischarge || !processed.totalArea) return false;
+    const completed: Run = {
+      ...applySelectedFlowInstrument(processed),
+      recordStatus: 'completed',
+      completedAt: new Date().toISOString(),
+    };
+    useGovernanceStore.getState().recordAudit({
+      module: 'flow', recordId: completed.id, action: 'complete', reason: '完成测流成果', before: state.currentRun, after: completed,
+    });
+    set({
+      currentRun: completed,
+      runs: state.runs.some((run) => run.id === completed.id)
+        ? state.runs.map((run) => run.id === completed.id ? JSON.parse(JSON.stringify(completed)) as Run : run)
+        : [JSON.parse(JSON.stringify(completed)) as Run, ...state.runs],
+      isDirty: false,
+    });
+    return true;
+  },
+
+  transitionRecordStatus: (status) => {
+    const state = get();
+    const before = state.currentRun;
+    if (before.recordStatus === 'draft' || before.recordStatus === 'revision') return;
+    const after: Run = { ...before, recordStatus: status };
+    useGovernanceStore.getState().recordAudit({
+      module: 'flow', recordId: before.id, action: status === 'archived' ? 'archive' : 'review', before, after,
+    });
+    set({
+      currentRun: after,
+      runs: state.runs.map((run) => run.id === after.id ? JSON.parse(JSON.stringify(after)) as Run : run),
+      isDirty: false,
+    });
   },
 
   // 【重构】智能导入引擎：兼容老版全量库 & 新版单测次分享包
@@ -947,19 +1095,19 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
       verticals: cleanedVerticals,
     };
 
-    const raw = localStorage.getItem(TEMPLATES_KEY);
-    const existing: SectionTemplate[] = raw ? JSON.parse(raw) : [];
-    existing.unshift(template);
-    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(existing));
+    set((state) => ({ templates: [template, ...state.templates] }));
     return template;
   },
 
   /** 删除指定模板 */
   deleteTemplate: (id: string) => {
-    const raw = localStorage.getItem(TEMPLATES_KEY);
-    if (!raw) return;
-    const existing: SectionTemplate[] = JSON.parse(raw);
-    localStorage.setItem(TEMPLATES_KEY, JSON.stringify(existing.filter(t => t.id !== id)));
+    set((state) => ({ templates: state.templates.filter((template) => template.id !== id) }));
+  },
+
+  migrateLegacyTemplates: async () => {
+    if (get().templates.length > 0) return;
+    const templates = await readLegacyTemplates();
+    if (templates.length > 0) set({ templates });
   },
 
   /** 【载入模板 v2】使用 set 方法直接完整覆盖 currentRun，强制深拷贝触发 React 重渲染 */
@@ -998,13 +1146,20 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   },
 }), { 
   name: STORAGE_KEY,
+  version: HYDRO_SCHEMA_VERSION,
   storage: createJSONStorage(() => capacitorStorage, { 
     reviver: (k, v) => k === 'expandedVerticalIds' && Array.isArray(v) ? new Set(v as unknown[]) : v, 
     replacer: (k, v) => k === 'expandedVerticalIds' && v instanceof Set ? [...v] : v 
   }), 
-  partialize: (s) => ({ currentRun: s.currentRun, runs: s.runs }),
-  onRehydrateStorage: () => (state) => {
+  migrate: (state) => migrateHydroPersistedState(state),
+  partialize: (s) => ({ currentRun: s.currentRun, runs: s.runs, templates: s.templates }),
+  onRehydrateStorage: () => (state, error) => {
+    if (error) {
+      console.error('[hydroStore] 持久化数据恢复失败', error);
+      useGovernanceStore.getState().recordDiagnostic('persistence');
+    }
     if (state) {
+      void state.migrateLegacyTemplates();
       state.setHasHydrated(true);
     }
   },

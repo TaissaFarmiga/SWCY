@@ -1,12 +1,14 @@
 /** 水准测量领域类型。录入值保留字符串；派生值缺失时使用 null。 */
 
-export const LEVELING_SCHEMA_VERSION = 2;
+import type { InstrumentSnapshot, RecordLifecycleStatus, RuleProfileSnapshot } from './governance';
+
+export const LEVELING_SCHEMA_VERSION = 3;
 
 export type LevelingGrade = '3' | '4' | 'out';
 export type StaffConstant = 4687 | 4787;
 export type SurveyDirection = 'forward' | 'return';
 export type LevelingRouteType = 'attached' | 'closed' | 'round-trip' | 'open';
-export type LevelingCompletionStatus = 'draft' | 'completed';
+export type LevelingCompletionStatus = RecordLifecycleStatus;
 
 export interface IntermediateReading {
   id: string;
@@ -138,7 +140,21 @@ export interface LevelingRoute {
   routeType: LevelingRouteType;
   direction: SurveyDirection;
   completionStatus: LevelingCompletionStatus;
+  revision: number;
   instrument: string;
+  instrumentProfileId?: string;
+  instrumentSnapshot?: InstrumentSnapshot;
+  ruleProfileId: string;
+  ruleProfileSnapshot: RuleProfileSnapshot;
+  taskNumber?: string;
+  organization?: string;
+  surveyor?: string;
+  checker?: string;
+  backStaffNumber?: string;
+  foreStaffNumber?: string;
+  weather?: string;
+  terrain?: string;
+  notes?: string;
   location?: string;
   staffNumber?: string;
   waterLevel?: string;

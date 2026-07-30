@@ -195,10 +195,21 @@ function buildSheet1(workbook: ExcelJS.Workbook, run: Run): void {
 
   // 1. 顶部基础元数据（带年份施测时间）
   sheet1.getCell('C2').value = `${year}/${dateStr} ${timeStr}`; // C2: 施测时间
+  sheet1.getCell('Q2').value = run.weather || '';              // Q2: 天气
   sheet1.getCell('C3').value = run.location || '';              // C3: 断面位置
-  sheet1.getCell('D4').value = run.meterFormula 
-    ? `K=${run.meterFormula.k}  C=${run.meterFormula.c}` 
-    : '';                                                       // D4: 公式
+  sheet1.getCell('N3').value = run.waterCondition || '';        // N3: 河段水情/冰情
+  const instrument = run.instrumentSnapshot;
+  const instrumentLabel = [instrument?.name, instrument?.model, instrument?.serialNumber].filter(Boolean).join(' / ');
+  const formulaLabel = run.meterFormula ? `K=${run.meterFormula.k}  C=${run.meterFormula.c}` : '';
+  sheet1.getCell('D4').value = [instrumentLabel, formulaLabel].filter(Boolean).join(' · '); // D4: 仪器及公式
+  sheet1.getCell('D15').value = [
+    run.stationCode ? `测站编码：${run.stationCode}` : '',
+    run.riverName ? `河流：${run.riverName}` : '',
+    run.operator ? `施测：${run.operator}` : '',
+    run.recorder ? `记录：${run.recorder}` : '',
+    run.reviewer ? `复核：${run.reviewer}` : '',
+    run.notes ? `备注：${run.notes}` : '',
+  ].filter(Boolean).join('；');
 
   // 计算表一特征值
   const vCount = run.verticals.filter(v => v.type === 'measure').length;
@@ -394,12 +405,17 @@ function buildSheet2(workbook: ExcelJS.Workbook, run: Run): void {
   }
 }
 
+export async function buildHydroWorkbook(run: Run, templateLoader: () => Promise<ExcelJS.Workbook> = loadTemplate): Promise<ExcelJS.Workbook> {
+  const workbook = await templateLoader();
+  buildSheet1(workbook, run);
+  buildSheet2(workbook, run);
+  return workbook;
+}
+
 export async function downloadExcel(): Promise<void> {
   // 🚨 同样采用"直接从仓库提货"的机制，获取重算后的最新数据
   const run = useHydroStore.getState().getProcessedRun();
-  const workbook = await loadTemplate();
-  buildSheet1(workbook, run);
-  buildSheet2(workbook, run);
+  const workbook = await buildHydroWorkbook(run);
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const location = run.location || '测站';

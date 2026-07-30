@@ -60,7 +60,7 @@ export function FlowDeviationTool({ onBack }: { onBack: () => void }) {
     : null;
 
   return (
-    <main className="mx-auto min-h-[100dvh] w-full max-w-xl px-3 pb-28 pt-safe">
+    <main className="app-safe-screen mx-auto min-h-[100dvh] w-full max-w-xl px-3 pb-28">
       <header className="mb-5 flex items-start gap-1">
         <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95">
           <ChevronLeft className="h-5 w-5" />

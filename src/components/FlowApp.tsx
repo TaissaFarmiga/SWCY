@@ -5,8 +5,6 @@
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Sun, Moon, Download, Upload, Activity, X, BookmarkPlus, Layers, Trash2, ChevronLeft } from 'lucide-react';
-import { Capacitor } from '@capacitor/core';
-import { StatusBar } from '@capacitor/status-bar';
 import Dashboard from './Dashboard';
 import PeriodToggle from './PeriodToggle';
 import HydroTable from './HydroTable';
@@ -15,6 +13,7 @@ import type { SnappedPoint } from './SectionCFDChart';
 import { useHydroStore } from '../store/hydroStore';
 import type { SectionTemplate } from '../store/hydroStore';
 import type { Run } from '../types';
+import { useUiStore } from '../store/uiStore';
 
 /* ──────────── Numbers 图标 ──────────── */
 function NumbersIcon({ className }: { className?: string }) {
@@ -47,26 +46,13 @@ function Toast({ message, show }: { message: string; show: boolean }) {
           animate={{ opacity: 1, y: 0, x: '-50%' }}
           exit={{ opacity: 0, y: -20, x: '-50%' }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="fixed top-6 left-1/2 z-[110] w-[88%] max-w-xs px-4 py-2.5 rounded-xl bg-red-500/95 dark:bg-red-600/95 text-white text-xs font-bold shadow-2xl text-center leading-snug break-words border border-white/20 backdrop-blur-md"
+          className="app-safe-toast fixed left-1/2 z-[110] w-[88%] max-w-xs px-4 py-2.5 rounded-xl bg-red-500/95 dark:bg-red-600/95 text-white text-xs font-bold shadow-2xl text-center leading-snug break-words border border-white/20 backdrop-blur-md"
         >
           {message}
         </motion.div>
       )}
     </AnimatePresence>
   );
-}
-
-/* ──────────── 模板持久化辅助 ──────────── */
-const TEMPLATES_KEY = 'hydrology-templates';
-
-function loadTemplates(): SectionTemplate[] {
-  try {
-    const raw = localStorage.getItem(TEMPLATES_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
 }
 
 /* ──────────── v7.0 底部数据栏（动态下沉覆盖） ──────────── */
@@ -157,6 +143,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   const deleteRun = useHydroStore((s) => s.deleteRun);
   const showHistory = useHydroStore((s) => s.showHistoryPanel);
   const toggleHistoryPanel = useHydroStore((s) => s.toggleHistoryPanel);
+  const templates = useHydroStore((s) => s.templates);
 
   const sortedRuns = useMemo(
     () => runs.slice().sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(0, 10),
@@ -171,11 +158,8 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   const measureCount = useHydroStore(
     (s) => s.currentRun.verticals.filter((v) => v.type === 'measure').length,
   );
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved) return saved === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  const darkMode = useUiStore((state) => state.darkMode);
+  const setDarkMode = useUiStore((state) => state.setDarkMode);
   const [toast, setToast] = useState({ show: false, message: '' });
   const [showImportMenu, setShowImportMenu] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -185,7 +169,6 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   const [sheetHeight, setSheetHeight] = useState(75); // vh 百分比，默认 75vh
   const minSheetVh = 28;   // 绝对安全防线：顶栏～64px + 底部～38px + 图表 >68px(chart padding) → 确保 Canvas 不崩溃
   const maxSheetVh = 95;
-  const [templates, setTemplates] = useState<SectionTemplate[]>(loadTemplates);
   const dragControls = useDragControls();
   const sheetContainerRef = useRef<HTMLDivElement>(null);
 
@@ -213,16 +196,8 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   );
 
   useEffect(() => {
-    recalculate();
+    recalculate(false);
   }, [recalculate]);
-
-  /* ── 沉浸式全面屏 ── */
-  useEffect(() => {
-    // 1. 沉浸式全面屏：让 WebView 直接垫在系统状态栏下面，实现无死角沉浸式渲染
-    if (Capacitor.isNativePlatform()) {
-      StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
-    }
-  }, []);
 
   /* ── 由 App 集中接管 Android 返回；此处仅消费当前业务弹层 ── */
   useEffect(() => {
@@ -246,11 +221,6 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
     window.addEventListener('hydro-app-back', handleAppBack);
     return () => window.removeEventListener('hydro-app-back', handleAppBack);
   }, [showCFDSheet, showImportMenu, showTemplateMenu]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
 
   /* 点击外部关闭导入菜单 */
   useEffect(() => {
@@ -289,7 +259,6 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   /* ── 模板：保存当前断面几何骨架 ── */
   const handleSaveTemplate = () => {
     const tpl = useHydroStore.getState().saveTemplate();
-    setTemplates(loadTemplates());
     showToast('📐 断面模板已保存 — ' + tpl.name);
   };
 
@@ -303,7 +272,6 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
   /* ── 模板：删除指定模板 ── */
   const handleDeleteTemplate = (id: string) => {
     useHydroStore.getState().deleteTemplate(id);
-    setTemplates(loadTemplates());
     showToast('🗑️ 模板已删除');
   };
 
@@ -335,12 +303,13 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
   return (
     <div
+      data-testid="flow-screen"
       id="app-root-container"
       className="min-h-screen bg-[#F2F2F7] dark:bg-gray-950 transition-[padding,colors] duration-300"
       style={{
-        paddingLeft: 'env(safe-area-inset-left)',
-        paddingRight: 'env(safe-area-inset-right)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'var(--app-safe-left)',
+        paddingRight: 'var(--app-safe-right)',
+        paddingBottom: 'var(--app-safe-bottom)',
       }}
     >
       <Toast message={toast.message} show={toast.show} />
@@ -352,7 +321,7 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10">
        {/* 标题栏 — 随屏滚动 */}
-        <header className="relative z-20 bg-[#F2F2F7] dark:bg-gray-950 pt-safe border-b border-slate-200/60 dark:border-gray-800/60">
+        <header className="app-safe-header relative z-20 bg-[#F2F2F7] dark:bg-gray-950 border-b border-slate-200/60 dark:border-gray-800/60">
           <div className="px-2 py-1.5 flex flex-wrap items-center justify-between gap-1.5">
             <div className="flex shrink-0 items-center">
               <button

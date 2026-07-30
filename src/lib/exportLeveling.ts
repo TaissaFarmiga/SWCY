@@ -332,14 +332,14 @@ function populateGrade3(sheet: ExcelJS.Worksheet, route: LevelingRoute): void {
   const signatureRow = 19 + extraRows;
   clearRows(sheet, GRADE3_DATA_START, GRADE3_DATA_START + Math.max(route.stations.length, 1) * 4 - 1, 13);
 
-  setValue(sheet, 'A2', `站名：${route.location ?? ''}`);
-  setValue(sheet, 'H2', `项目：${route.name}`);
+  setValue(sheet, 'A2', `站名：${route.location ?? ''}${route.taskNumber ? ` · 任务 ${route.taskNumber}` : ''}`);
+  setValue(sheet, 'H2', `项目：${route.name}${route.organization ? ` · ${route.organization}` : ''}`);
   setValue(sheet, 'A3', `测自：${route.calculation.startPointName}`);
   setValue(sheet, 'E3', `测至：${route.calculation.endPointName}`);
-  setValue(sheet, 'H3', '天气：');
-  setValue(sheet, 'K3', '成像：');
-  setValue(sheet, 'A4', '基面：');
-  setValue(sheet, 'E4', `仪器：${route.instrument}`);
+  setValue(sheet, 'H3', `天气：${route.weather ?? ''}`);
+  setValue(sheet, 'K3', `地形：${route.terrain ?? ''}`);
+  setValue(sheet, 'A4', `尺号：${[route.backStaffNumber, route.foreStaffNumber].filter(Boolean).join('/')}`);
+  setValue(sheet, 'E4', `仪器：${route.instrumentSnapshot?.name ?? route.instrument}${route.instrumentSnapshot?.serialNumber ? ` · ${route.instrumentSnapshot.serialNumber}` : ''}`);
   setValue(sheet, 'H4', `测量时间：${formatDateTime(route.startTime ?? route.createdAt)}`);
 
   route.stations.forEach((station, index) => {
@@ -384,11 +384,11 @@ function populateGrade3(sheet: ExcelJS.Worksheet, route: LevelingRoute): void {
   setValue(sheet, `I${summaryDataRow}`, route.calculation.knownEndElevation, '0.000');
   setValue(sheet, `J${summaryDataRow}`, route.calculation.adoptedElevation, '0.000');
   setValue(sheet, `K${summaryDataRow}`, route.calculation.isWithinTolerance === null ? '待计算' : route.calculation.isWithinTolerance ? '符合当前限差参数' : '超限');
-  setValue(sheet, `A${signatureRow}`, `测量：${route.observer ?? ''}`);
+  setValue(sheet, `A${signatureRow}`, `测量：${route.surveyor ?? route.observer ?? ''}`);
   setValue(sheet, `C${signatureRow}`, `记载：${route.recorder ?? ''}`);
   setValue(sheet, `E${signatureRow}`, '计算：应用自动计算');
-  setValue(sheet, `G${signatureRow}`, '初校：');
-  setValue(sheet, `J${signatureRow}`, '复校：');
+  setValue(sheet, `G${signatureRow}`, `初校：${route.checker ?? ''}`);
+  setValue(sheet, `J${signatureRow}`, `备注：${route.notes ?? ''}`);
 }
 
 function routeZeroElevation(route: LevelingRoute): number | null {
@@ -413,10 +413,10 @@ function populateGrade4(sheet: ExcelJS.Worksheet, route: LevelingRoute): void {
 
   const gradeLabel = route.grade === '4' ? '四等' : '等外';
   setValue(sheet, 'A1', `${route.location ?? ''}${gradeLabel}水准测量记载表`);
-  setValue(sheet, 'AL2', route.id.slice(0, 8));
+  setValue(sheet, 'AL2', route.taskNumber ?? route.id.slice(0, 8));
   setValue(sheet, 'C3', route.name);
   setValue(sheet, 'N3', route.location ?? '');
-  setValue(sheet, 'C4', route.staffNumber ?? '');
+  setValue(sheet, 'C4', [route.backStaffNumber, route.foreStaffNumber].filter(Boolean).join('/') || route.staffNumber || '');
   setValue(sheet, 'I4', routeZeroElevation(route), '0.00');
   setValue(sheet, 'O4', toFiniteDecimal(route.waterEdgeReading)?.toNumber() ?? null, '0.000');
   setValue(sheet, 'T4', toFiniteDecimal(route.waterLevel)?.toNumber() ?? null, '0.000');
@@ -478,13 +478,17 @@ function populateGrade4(sheet: ExcelJS.Worksheet, route: LevelingRoute): void {
       `等级：${gradeLabel}`,
       `路线：${routeTypeLabel(route.routeType)}`,
       `测站：${route.stations.length}`,
+      `单位：${route.organization ?? ''}`,
+      `仪器：${route.instrumentSnapshot?.name ?? route.instrument}${route.instrumentSnapshot?.serialNumber ? ` / ${route.instrumentSnapshot.serialNumber}` : ''}`,
+      `天气/地形：${[route.weather, route.terrain].filter(Boolean).join(' / ')}`,
       `结果：${route.calculation.isWithinTolerance === null ? '待完整数据' : route.calculation.isWithinTolerance ? '符合当前限差参数' : '超限'}`,
-    ].join('\n'),
+      route.notes ? `备注：${route.notes}` : '',
+    ].filter(Boolean).join('\n'),
   );
-  setValue(sheet, `A${signatureRow}`, `测量：${route.observer ?? ''}`);
+  setValue(sheet, `A${signatureRow}`, `测量：${route.surveyor ?? route.observer ?? ''}`);
   setValue(sheet, `H${signatureRow}`, `记录：${route.recorder ?? ''}`);
   setValue(sheet, `N${signatureRow}`, '计算：应用自动计算');
-  setValue(sheet, `T${signatureRow}`, '校核：');
+  setValue(sheet, `T${signatureRow}`, `校核：${route.checker ?? ''}`);
 }
 
 export async function buildLevelingWorkbook(

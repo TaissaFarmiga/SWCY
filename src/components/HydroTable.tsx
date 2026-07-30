@@ -3,7 +3,7 @@
  * 历史记录：强化命名 + 防误触删除
  */
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, MapPin, Gauge, Calendar } from 'lucide-react';
 import { useHydroStore } from '../store/hydroStore';
 import VerticalCard from './VerticalCard';
@@ -17,6 +17,30 @@ export default function HydroTable() {
   const setLastAddedVerticalId = useHydroStore((s) => s.setLastAddedVerticalId);
 
   const showMetaPanel = useHydroStore((s) => s.showMetaPanel);
+  const [formulaDraft, setFormulaDraft] = useState(() => ({
+    k: String(currentRun.meterFormula?.k ?? 0.428),
+    c: String(currentRun.meterFormula?.c ?? 0.0057),
+  }));
+
+  useEffect(() => {
+    setFormulaDraft({
+      k: String(currentRun.meterFormula?.k ?? 0.428),
+      c: String(currentRun.meterFormula?.c ?? 0.0057),
+    });
+  }, [currentRun.id, currentRun.meterFormula?.c, currentRun.meterFormula?.k]);
+
+  const commitFormula = () => {
+    const k = Number(formulaDraft.k);
+    const c = Number(formulaDraft.c);
+    if (formulaDraft.k.trim() !== '' && formulaDraft.c.trim() !== '' && Number.isFinite(k) && Number.isFinite(c)) {
+      useHydroStore.getState().updateMeterFormula({ k, c });
+      return;
+    }
+    setFormulaDraft({
+      k: String(currentRun.meterFormula?.k ?? 0.428),
+      c: String(currentRun.meterFormula?.c ?? 0.0057),
+    });
+  };
   // datetime-local 格式化器
   const formatDatetimeLocal = (isoStr: string) => {
     if (!isoStr) return '';
@@ -50,7 +74,10 @@ export default function HydroTable() {
                 <input 
                   type="datetime-local" 
                   value={formatDatetimeLocal(currentRun.timestamp)}
-                  onChange={(e) => updateRunMeta(currentRun.id, 'timestamp', new Date(e.target.value).toISOString())}
+                  onChange={(e) => {
+                    const date = new Date(e.target.value);
+                    if (Number.isFinite(date.getTime())) updateRunMeta(currentRun.id, 'timestamp', date.toISOString());
+                  }}
                   className="flex-1 min-w-0 px-2 py-1 text-sm rounded-md bg-white/80 dark:bg-gray-800/80 dark:text-slate-200 border border-slate-200 dark:border-gray-600 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 outline-none font-sans" 
                 />
               </div>
@@ -65,14 +92,26 @@ export default function HydroTable() {
                   className="flex-1 min-w-0 px-1.5 py-0.5 text-sm rounded-md bg-white/80 dark:bg-gray-800/80 dark:text-slate-200 border border-slate-200 dark:border-gray-600 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 outline-none font-mono" />
               </div>
               <div className="flex items-center gap-1.5"><span className="text-xs text-slate-400 font-mono shrink-0">K (a)</span>
-                <input type="text" inputMode="decimal" step="0.0001" value={currentRun.meterFormula?.k ?? 0.4280}
-                  onChange={(e) => useHydroStore.getState().updateMeterFormula({ ...currentRun.meterFormula!, k: parseFloat(e.target.value) || 0 })}
+                <input type="text" inputMode="decimal" value={formulaDraft.k}
+                  onChange={(e) => setFormulaDraft((value) => ({ ...value, k: e.target.value }))} onBlur={commitFormula}
                   className="flex-1 min-w-0 px-1.5 py-0.5 text-sm rounded-md bg-white/80 dark:bg-gray-800/80 dark:text-slate-200 border border-slate-200 dark:border-gray-600 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 outline-none font-mono text-hydro-blue dark:text-cyan-400" />
               </div>
               <div className="flex items-center gap-1.5"><span className="text-xs text-slate-400 font-mono shrink-0">C (b)</span>
-                <input type="text" inputMode="decimal" step="0.0001" value={currentRun.meterFormula?.c ?? 0.0057}
-                  onChange={(e) => useHydroStore.getState().updateMeterFormula({ ...currentRun.meterFormula!, c: parseFloat(e.target.value) || 0 })}
+                <input type="text" inputMode="decimal" value={formulaDraft.c}
+                  onChange={(e) => setFormulaDraft((value) => ({ ...value, c: e.target.value }))} onBlur={commitFormula}
                   className="flex-1 min-w-0 px-1.5 py-0.5 text-sm rounded-md bg-white/80 dark:bg-gray-800/80 dark:text-slate-200 border border-slate-200 dark:border-gray-600 focus:border-hydro-blue focus:ring-1 focus:ring-hydro-blue/30 outline-none font-mono text-hydro-blue dark:text-cyan-400" />
+              </div>
+              <div className="col-span-1 md:col-span-4 mt-1 border-t border-slate-200/60 pt-2 dark:border-gray-700/60">
+                <div className="mb-2 rounded-md bg-cyan-50/70 px-2 py-1 text-[10px] leading-4 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300">
+                  当前仪器：{currentRun.instrumentSnapshot?.name ?? '未登记流速仪'}{currentRun.instrumentSnapshot?.serialNumber ? ` · ${currentRun.instrumentSnapshot.serialNumber}` : ''} · 状态 {currentRun.instrumentSnapshot?.status ?? 'unregistered'}
+                </div>
+                <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2">
+                  {([
+                    ['stationCode', '测站编码'], ['riverName', '河流名称'], ['operator', '施测人员'], ['recorder', '记录人员'],
+                    ['reviewer', '复核人员'], ['weather', '天气'], ['waterCondition', '水情'],
+                  ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRun[key] ?? ''} placeholder={placeholder} onChange={(event) => updateRunMeta(currentRun.id, key, event.target.value)} className="min-h-11 min-w-0 rounded-md border border-slate-200 bg-white/80 px-2 text-sm outline-none focus:border-hydro-blue dark:border-gray-600 dark:bg-gray-800/80 dark:text-slate-200" />)}
+                  <textarea value={currentRun.notes ?? ''} placeholder="备注" onChange={(event) => updateRunMeta(currentRun.id, 'notes', event.target.value)} className="min-h-16 min-w-0 resize-y rounded-md border border-slate-200 bg-white/80 px-2 py-2 text-sm outline-none focus:border-hydro-blue dark:border-gray-600 dark:bg-gray-800/80 dark:text-slate-200 min-[360px]:col-span-2" />
+                </div>
               </div>
             </div>
           </motion.div>

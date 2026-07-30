@@ -1,24 +1,63 @@
 import { useState, useEffect } from 'react';
 import { App as CapApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { motion } from 'framer-motion';
 import { Home } from './components/Home';
 import FlowApp from './components/FlowApp';
 import { LevelingApp } from './components/leveling/LevelingApp';
 import { FlowDeviationTool } from './components/tools/FlowDeviationTool';
 import { SpiritLevel } from './components/tools/SpiritLevel';
+import { GovernanceCenter } from './components/GovernanceCenter';
+import { AppInfo } from './components/AppInfo';
+import { useGovernanceStore } from './store/governanceStore';
+import { useUiStore } from './store/uiStore';
 import type { AppRoute } from './types/navigation';
 import { useZeroJitter } from './hooks/useZeroJitter';
 
 export default function App() {
   const [route, setRoute] = useState<AppRoute>({ type: 'home' });
+  const darkMode = useUiStore((state) => state.darkMode);
 
   // 动态挂载 I/O 驱动：精确寻找当前激活的业务岛屿滚动容器
   useZeroJitter(route.type !== 'home', `scroll-${route.type}`);
 
   useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    const isDark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
+
+  useEffect(() => {
+    const recordJavaScriptError = () => useGovernanceStore.getState().recordDiagnostic('javascript');
+    const recordPromiseError = () => useGovernanceStore.getState().recordDiagnostic('promise');
+    window.addEventListener('error', recordJavaScriptError);
+    window.addEventListener('unhandledrejection', recordPromiseError);
+    return () => {
+      window.removeEventListener('error', recordJavaScriptError);
+      window.removeEventListener('unhandledrejection', recordPromiseError);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    // One global status-bar policy. Flow and leveling pages must not change
+    // WebView overlay behavior independently because that moves every route.
+    StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
+
+    const syncStatusBarStyle = () => {
+      const style = document.documentElement.classList.contains('dark')
+        ? Style.Dark
+        : Style.Light;
+      StatusBar.setStyle({ style }).catch(() => {});
+    };
+
+    syncStatusBarStyle();
+    const observer = new MutationObserver(syncStatusBarStyle);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -100,6 +139,26 @@ export default function App() {
           >
             {/* 仅在激活时挂载，彻底阻断后台传感器耗电 */}
             {route.type === 'spirit-level' && <SpiritLevel onBack={() => setRoute({ type: 'home' })} />}
+          </motion.div>
+
+          <motion.div
+            id="scroll-governance"
+            aria-hidden={route.type !== 'governance'}
+            animate={{ opacity: route.type === 'governance' ? 1 : 0 }}
+            transition={{ duration: 0.25 }}
+            className={`absolute inset-0 overflow-y-auto overflow-x-hidden ${route.type === 'governance' ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}
+          >
+            {route.type === 'governance' && <GovernanceCenter onBack={() => setRoute({ type: 'home' })} />}
+          </motion.div>
+
+          <motion.div
+            id="scroll-app-info"
+            aria-hidden={route.type !== 'app-info'}
+            animate={{ opacity: route.type === 'app-info' ? 1 : 0 }}
+            transition={{ duration: 0.25 }}
+            className={`absolute inset-0 overflow-y-auto overflow-x-hidden ${route.type === 'app-info' ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}
+          >
+            {route.type === 'app-info' && <AppInfo onBack={() => setRoute({ type: 'home' })} />}
           </motion.div>
         </div>
 

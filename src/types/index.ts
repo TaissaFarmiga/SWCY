@@ -8,7 +8,11 @@ export type FlowPeriod = 'open' | 'ice';
 export type VelocityInputMode = 'direct' | 'formula';
 export type SamplerType = 'horizontal' | 'bottle' | 'other';
 
+export const HYDRO_SCHEMA_VERSION = 2;
+
 export interface MeterFormula { k: number; c: number; }
+
+import type { InstrumentSnapshot, RecordLifecycleStatus } from './governance';
 
 export const SHORE_COEFFICIENT_OPTIONS = [
   { value: '0.70', label: '平缓岸', range: '0.67~0.75' },
@@ -84,6 +88,7 @@ export interface Vertical {
 }
 
 export interface Run {
+  schemaVersion: number;
   id: string;
   parentId?: string;           // 🧬 亲子指针：草稿分支指向原始父级测次 ID
   runNumber: string;
@@ -95,6 +100,20 @@ export interface Run {
   waterLevel?: string;
   location?: string;
   meterFormula?: MeterFormula;
+  meterFormulaSnapshot?: MeterFormula;
+  instrumentProfileId?: string;
+  instrumentSnapshot?: InstrumentSnapshot;
+  recordStatus: RecordLifecycleStatus;
+  revision: number;
+  completedAt?: string;
+  stationCode?: string;
+  riverName?: string;
+  operator?: string;
+  recorder?: string;
+  reviewer?: string;
+  weather?: string;
+  waterCondition?: string;
+  notes?: string;
   sedimentEnabled?: boolean;
   defaultSamplerType?: SamplerType;
   defaultSampleVolume?: string;
@@ -108,6 +127,8 @@ export interface Run {
   meanSedimentConc?: string;
   startTime?: string;
   endTime?: string;
+  startAt?: string;
+  endAt?: string;
   duration?: string;
 }
 

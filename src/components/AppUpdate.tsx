@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronRight, Download, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { SnapshotPlugin } from '../bridge/snapshotPlugin';
@@ -10,7 +11,7 @@ import {
   type GitHubUpdateRelease,
 } from '../lib/githubUpdate';
 
-type UpdateStatus = 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error';
+type UpdateStatus = 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'managed' | 'error';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -61,8 +62,18 @@ export function AppUpdate() {
       let installedVersion = __APP_VERSION__;
       if (Capacitor.isNativePlatform()) {
         try {
-          const info = await SnapshotPlugin.getCurrentInfo();
-          if (info.apkVersion) installedVersion = info.apkVersion;
+          const [snapshotInfo, appInfo] = await Promise.all([
+            SnapshotPlugin.getCurrentInfo(),
+            App.getInfo(),
+          ]);
+          if (snapshotInfo.apkVersion) installedVersion = snapshotInfo.apkVersion;
+          if (!mountedRef.current) return;
+          setCurrentVersion(installedVersion);
+          if (appInfo.id.endsWith('.store')) {
+            setStatus('managed');
+            setMessage('版本由应用商店统一管理');
+            return;
+          }
         } catch {
           installedVersion = __APP_VERSION__;
         }
@@ -89,7 +100,7 @@ export function AppUpdate() {
   }, [drawerOpen]);
 
   const openOrCheck = () => {
-    if (status === 'checking') return;
+    if (status === 'checking' || status === 'managed') return;
     if (status === 'available' || status === 'downloading' || status === 'ready') {
       setDrawerOpen(true);
       return;
@@ -98,7 +109,7 @@ export function AppUpdate() {
   };
 
   const installUpdate = async () => {
-    if (!release || status === 'downloading') return;
+    if (!release || status === 'downloading' || status === 'managed') return;
     if (!Capacitor.isNativePlatform()) {
       window.open(release.htmlUrl, '_blank', 'noopener,noreferrer');
       return;
@@ -132,7 +143,7 @@ export function AppUpdate() {
 
   const statusIcon = status === 'checking'
     ? <RefreshCw className="h-4 w-4 animate-spin" />
-    : status === 'latest'
+    : status === 'latest' || status === 'managed'
       ? <Check className="h-4 w-4" />
       : <Download className="h-4 w-4" />;
 
@@ -164,7 +175,7 @@ export function AppUpdate() {
             <motion.div
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-              className="relative w-full max-w-xl rounded-t-[28px] border border-white/70 bg-[#F8F9FC]/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 shadow-2xl backdrop-blur-2xl dark:border-gray-700 dark:bg-gray-900/95"
+              className="relative w-full max-w-xl rounded-t-[28px] border border-white/70 bg-[#F8F9FC]/95 px-4 pb-[max(1rem,var(--app-safe-bottom))] pt-3 shadow-2xl backdrop-blur-2xl dark:border-gray-700 dark:bg-gray-900/95"
             >
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-gray-600" />
               <div className="flex items-start gap-3">

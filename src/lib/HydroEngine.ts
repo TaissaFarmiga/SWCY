@@ -9,7 +9,7 @@
  */
 
 import { Decimal } from 'decimal.js';
-import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula, getMethodDepthPoints, DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT } from '../types';
+import { Run, Vertical, MeasurePoint, FlowPeriod, MeasureMethod, MeterFormula, getMethodDepthPoints, DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT, HYDRO_SCHEMA_VERSION } from '../types';
 import { toFiniteDecimal } from './rounding';
 
 // 强制开启国标修约：四舍六入五成双 (Banker's Rounding)
@@ -347,6 +347,7 @@ export function createMeasureVertical(vn: number, fp: FlowPeriod, method: Measur
 
 export function createNewRun(rn: number, fp: FlowPeriod = 'open'): Run {
     return {
+        schemaVersion: HYDRO_SCHEMA_VERSION,
         id: crypto.randomUUID(),
         runNumber: String(rn),
         timestamp: new Date().toISOString(),
@@ -360,6 +361,10 @@ export function createNewRun(rn: number, fp: FlowPeriod = 'open'): Run {
         waterLevel: '',
         location: '',
         meterFormula: { ...DEFAULT_METER_FORMULA },
+        meterFormulaSnapshot: { ...DEFAULT_METER_FORMULA },
+        instrumentProfileId: 'unregistered-flow-meter',
+        recordStatus: 'draft',
+        revision: 0,
         startTime: '',
         endTime: '',
         duration: '',

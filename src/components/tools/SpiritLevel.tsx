@@ -285,8 +285,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
           : '需要设备方向或重力传感器。请将手机竖直贴近水准尺，再点击启动。';
 
     return (
-      <main className="relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center justify-center px-4 pb-28 pt-safe text-center">
-        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="absolute left-3 top-[max(0.5rem,env(safe-area-inset-top))] flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95 dark:text-slate-300 dark:hover:bg-gray-800/60">
+      <main className="app-safe-screen relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center justify-center px-4 pb-28 text-center">
+        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="app-safe-floating-top absolute left-3 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95 dark:text-slate-300 dark:hover:bg-gray-800/60">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-white/80 bg-white/65 shadow-lg backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/60">
@@ -325,7 +325,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
   const ringColor = perfect ? 'border-emerald-500/40' : warning ? 'border-amber-400/35' : 'border-red-500/30';
 
   return (
-    <main className="mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center overflow-x-hidden px-3 pb-28 pt-safe min-[360px]:px-4">
+    <main className="app-safe-screen mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center overflow-x-hidden px-3 pb-28 min-[360px]:px-4">
       <header className="relative mb-5 w-full min-h-11 text-center">
         <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="absolute left-0 top-0 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95 dark:text-slate-300 dark:hover:bg-gray-800/60">
           <ChevronLeft className="h-5 w-5" />

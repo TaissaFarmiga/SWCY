@@ -5,44 +5,17 @@ import type {
   StaffConstant,
   StationResult,
 } from '../types/leveling';
+import type { GradeToleranceProfile, LevelingRuleProfile, RuleProfileSnapshot } from '../types/governance';
 import { Decimal, toFiniteDecimal } from './rounding';
+import { DEFAULT_LEVELING_RULE_PROFILE, gradeTolerance, LEVELING_RULE_SOURCE } from './levelingRules';
 
-export interface GradeTolerance {
-  readonly maxSightDistance: number;
-  readonly maxDistanceDiff: number;
-  readonly maxAccumulatedDiff: number;
-  readonly maxBlackRedDiff: number | null;
-  readonly maxDeltaDiff: number | null;
-}
+export type GradeTolerance = GradeToleranceProfile;
 
 /**
  * 沿用项目现有外业限差。来源标记为待规范原文复核，避免把未核对参数伪称为规范原值。
  */
-export const LEVELING_RULE_SOURCE = '现有项目参数；待对照单位现行规范原文复核';
-
-export const TOLERANCE_MATRIX: Readonly<Record<LevelingGrade, GradeTolerance>> = Object.freeze({
-  '3': Object.freeze({
-    maxSightDistance: 75,
-    maxDistanceDiff: 2,
-    maxAccumulatedDiff: 5,
-    maxBlackRedDiff: 2,
-    maxDeltaDiff: 3,
-  }),
-  '4': Object.freeze({
-    maxSightDistance: 100,
-    maxDistanceDiff: 3,
-    maxAccumulatedDiff: 10,
-    maxBlackRedDiff: 3,
-    maxDeltaDiff: 5,
-  }),
-  out: Object.freeze({
-    maxSightDistance: 150,
-    maxDistanceDiff: 5,
-    maxAccumulatedDiff: 30,
-    maxBlackRedDiff: null,
-    maxDeltaDiff: null,
-  }),
-});
+export { LEVELING_RULE_SOURCE };
+export const TOLERANCE_MATRIX: Readonly<Record<LevelingGrade, GradeTolerance>> = DEFAULT_LEVELING_RULE_PROFILE.tolerances;
 
 export interface ValidationResult {
   isValid: boolean;
@@ -76,10 +49,13 @@ function bankersRoundMillimeter(value: number): number {
   return new Decimal(value).toDecimalPlaces(0, Decimal.ROUND_HALF_EVEN).toNumber();
 }
 
-function sniffStaffK(blackMm: number | null, redMm: number | null): StaffConstant | null {
+function sniffStaffK(blackMm: number | null, redMm: number | null, constants: readonly StaffConstant[]): StaffConstant | null {
   if (blackMm === null || redMm === null) return null;
   const difference = redMm - blackMm;
-  return Math.abs(difference - 4687) <= Math.abs(difference - 4787) ? 4687 : 4787;
+  return constants.reduce<StaffConstant | null>((closest, candidate) => {
+    if (closest === null) return candidate;
+    return Math.abs(difference - candidate) < Math.abs(difference - closest) ? candidate : closest;
+  }, null);
 }
 
 function valueLabel(raw: string, label: string, errors: string[]): number | null {
@@ -158,9 +134,11 @@ export function processStation(
   grade: LevelingGrade,
   previousAccumulatedDiff: number | null = 0,
   previousElevation: number | null = null,
+  ruleProfile?: LevelingRuleProfile | RuleProfileSnapshot,
 ): StationResult {
   const { readings } = station;
-  const tolerance = TOLERANCE_MATRIX[grade];
+  const activeRuleProfile = ruleProfile ?? DEFAULT_LEVELING_RULE_PROFILE;
+  const tolerance = gradeTolerance(grade, activeRuleProfile);
   const validation = validateReadings(readings, grade);
   const limitErrors: string[] = [];
 
@@ -208,8 +186,8 @@ export function processStation(
   const blackDelta = blackDeltaMm === null ? null : metersFromMillimeters(blackDeltaMm);
   const redDelta = redDeltaMm === null ? null : metersFromMillimeters(redDeltaMm);
 
-  const sniffedBackK = sniffStaffK(backBlackMm, backRedMm);
-  const sniffedForeK = sniffStaffK(foreBlackMm, foreRedMm);
+  const sniffedBackK = sniffStaffK(backBlackMm, backRedMm, activeRuleProfile.staffConstants);
+  const sniffedForeK = sniffStaffK(foreBlackMm, foreRedMm, activeRuleProfile.staffConstants);
   const backDiff = sniffedBackK !== null && backBlackMm !== null && backRedMm !== null
     ? Math.abs(backBlackMm + sniffedBackK - backRedMm)
     : null;
@@ -248,7 +226,7 @@ export function processStation(
   const intermediateResults = (readings.intermediates ?? []).map((intermediate) => {
     const blackMm = parseStaffReadingMm(intermediate.black);
     const redMm = parseStaffReadingMm(intermediate.red);
-    const sniffedK = sniffStaffK(blackMm, redMm);
+    const sniffedK = sniffStaffK(blackMm, redMm, activeRuleProfile.staffConstants);
     const staffDiff = sniffedK !== null && blackMm !== null && redMm !== null
       ? Math.abs(blackMm + sniffedK - redMm)
       : null;

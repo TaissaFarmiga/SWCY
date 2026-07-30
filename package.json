@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.10.26",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "generate-icons": "npx @capacitor/assets generate --android",
     "release": "node scripts/deploy-github.cjs",
@@ -13,7 +16,17 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "test": "node scripts/run-business-tests.mjs",
     "validate:business": "node scripts/run-business-tests.mjs",
-    "build:android": "npm run build && npx cap sync android"
+    "validate:store:code": "node scripts/validate-store-readiness.mjs --code-only",
+    "validate:store": "node scripts/validate-store-readiness.mjs",
+    "audit:android:store": "node scripts/audit-store-manifest.mjs storeDebug",
+    "build:android": "npm run build && npx cap sync android",
+    "build:android:enterprise": "npm run build:android && cd android && gradlew.bat assembleEnterpriseRelease --no-daemon --console=plain",
+    "build:android:store": "npm run build:android && cd android && gradlew.bat bundleStoreRelease --no-daemon --console=plain",
+    "build:android:store:debug": "npm run build:android && cd android && gradlew.bat bundleStoreDebug --no-daemon --console=plain && cd .. && node scripts/audit-store-manifest.mjs storeDebug",
+    "test:android:compile": "cd android && gradlew.bat assembleSmokeDebug assembleSmokeDebugAndroidTest --no-daemon --console=plain",
+    "test:android:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-smoke.ps1 -Mode smoke",
+    "test:android:screenshots": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-smoke.ps1 -Mode screenshots",
+    "test:android:stress": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/android-smoke.ps1 -Mode stress"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -50,5 +63,12 @@
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",
     "vite-plugin-pwa": "^1.3.0"
+  },
+  "overrides": {
+    "exceljs": {
+      "archiver": "8.0.0",
+      "unzipper": "0.12.3",
+      "uuid": "11.1.1"
+    }
   }
 }

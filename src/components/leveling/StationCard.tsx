@@ -9,7 +9,7 @@ import { AnimatePresence } from 'framer-motion'; // 只留给内部结果展开�
 import { ChevronDown, ChevronUp, Trash2, Gauge, AlertCircle } from 'lucide-react';
 import { useLevelingStore } from '../../store/levelingStore';
 import type { LevelingGrade, LevelingStation, LevelingReadings } from '../../types/leveling';
-import { TOLERANCE_MATRIX } from '../../lib/LevelingEngine';
+import { gradeTolerance } from '../../lib/levelingRules';
 
 interface Props {
   station: LevelingStation;
@@ -84,13 +84,14 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
 
 const StationCardComponent = ({ station, index, grade }: Props) => {
   const { updateStationReading, deleteStation, addIntermediate, updateIntermediate, removeIntermediate, setStationDirection } = useLevelingStore();
+  const ruleProfileSnapshot = useLevelingStore((state) => state.currentRoute.ruleProfileSnapshot);
   const [showResults, setShowResults] = useState(false);
 
   const readings = station.readings;
   const result = station.result;
   const hasError = result.isComplete && !result.isValid;
   const isIncomplete = !result.isComplete;
-  const tolerance = TOLERANCE_MATRIX[grade];
+  const tolerance = gradeTolerance(grade, ruleProfileSnapshot);
 
   const handleChange = useCallback((field: keyof LevelingReadings) => (val: string) => {
     updateStationReading(station.id, { [field]: val });
