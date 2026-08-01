@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "appVersion": "1.10.28",
+  "requestedRounds": 10,
+  "startedAt": "2026-08-01T09:30:50.049Z",
+  "completedAt": "2026-08-01T09:36:18.316Z",
+  "status": "passed",
+  "gitHead": "b9642134518189c493837074656ca5d9188fd002",
+  "sourceFingerprint": "0296f4267286f2de1f89224c994245f4af31fe1b8beae014b33eb0bba3ebac1e",
+  "node": "v24.16.0",
+  "platform": "win32-x64",
+  "rounds": [
+    {
+      "round": 1,
+      "startedAt": "2026-08-01T09:30:50.350Z",
+      "completedAt": "2026-08-01T09:31:33.800Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 6048,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 15077,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 2213,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 20102,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "startedAt": "2026-08-01T09:31:33.801Z",
+      "completedAt": "2026-08-01T09:32:05.920Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4600,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 11459,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1429,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 14623,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "startedAt": "2026-08-01T09:32:05.921Z",
+      "completedAt": "2026-08-01T09:32:37.155Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4659,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 12393,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1560,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 12614,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 4,
+      "startedAt": "2026-08-01T09:32:37.156Z",
+      "completedAt": "2026-08-01T09:33:11.276Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4617,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 13148,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1778,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 14569,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "startedAt": "2026-08-01T09:33:11.277Z",
+      "completedAt": "2026-08-01T09:33:41.277Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4588,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 11597,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1419,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 12389,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 6,
+      "startedAt": "2026-08-01T09:33:41.278Z",
+      "completedAt": "2026-08-01T09:34:13.996Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4064,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 12900,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1458,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 14288,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 7,
+      "startedAt": "2026-08-01T09:34:13.997Z",
+      "completedAt": "2026-08-01T09:34:43.862Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4241,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 11559,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1535,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 12523,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 8,
+      "startedAt": "2026-08-01T09:34:43.863Z",
+      "completedAt": "2026-08-01T09:35:16.422Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4672,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 13022,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1745,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 13111,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 9,
+      "startedAt": "2026-08-01T09:35:16.423Z",
+      "completedAt": "2026-08-01T09:35:46.677Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4104,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 11420,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1509,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 13214,
+          "error": null
+        }
+      ]
+    },
+    {
+      "round": 10,
+      "startedAt": "2026-08-01T09:35:46.678Z",
+      "completedAt": "2026-08-01T09:36:18.316Z",
+      "status": "passed",
+      "gates": [
+        {
+          "label": "typecheck",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run typecheck",
+          "exitCode": 0,
+          "durationMs": 4771,
+          "error": null
+        },
+        {
+          "label": "lint",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run lint",
+          "exitCode": 0,
+          "durationMs": 12349,
+          "error": null
+        },
+        {
+          "label": "business-tests",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js test",
+          "exitCode": 0,
+          "durationMs": 1634,
+          "error": null
+        },
+        {
+          "label": "production-build",
+          "command": "C:\\Program Files\\nodejs\\node.exe C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js run build",
+          "exitCode": 0,
+          "durationMs": 12877,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "completedRounds": 10,
+  "totalGates": 40,
+  "finalSourceFingerprint": "0296f4267286f2de1f89224c994245f4af31fe1b8beae014b33eb0bba3ebac1e"
+}

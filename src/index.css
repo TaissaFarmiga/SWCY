@@ -16,9 +16,12 @@
 
 @supports (padding: max(0px)) {
   .pt-safe,
-  .app-safe-screen,
-  .app-safe-header {
+  .app-safe-screen {
     padding-top: max(1rem, var(--app-safe-top));
+  }
+
+  .app-safe-header {
+    padding-top: max(0.25rem, var(--app-safe-top));
   }
 
   .pb-safe {
@@ -130,7 +133,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 .glass-icon-button,
 .glass-pill-button,
 .glass-primary-button,
-.glass-menu-button {
+.glass-menu-button,
+.glass-rounded-button,
+.glass-danger-button {
+  position: relative;
   border: 1px solid var(--glass-border);
   background: var(--glass-fill);
   box-shadow: var(--glass-shadow);
@@ -141,8 +147,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .glass-icon-button {
   display: inline-flex;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 40px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
@@ -151,12 +157,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .glass-pill-button {
   display: inline-flex;
-  min-height: 40px;
+  min-height: 36px;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   border-radius: 9999px;
-  padding: 0.375rem 0.75rem;
+  padding: 0.25rem 0.65rem;
   color: rgb(51 65 85);
   font-size: 0.75rem;
   font-weight: 700;
@@ -164,7 +170,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 
 .glass-primary-button {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -172,44 +178,85 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   border-color: rgba(37, 99, 235, 0.32);
   background: rgba(219, 234, 254, 0.74);
   color: rgb(29 78 216);
-  padding: 0.625rem 1rem;
+  padding: 0.45rem 0.85rem;
   font-size: 0.875rem;
   font-weight: 700;
 }
 
 .glass-menu-button {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 38px;
   min-width: 0;
   align-items: center;
   justify-content: flex-start;
   gap: 0.5rem;
-  border-radius: 9999px;
-  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.375rem 0.65rem;
   color: rgb(51 65 85);
   font-size: 0.75rem;
   font-weight: 650;
 }
 
+.glass-rounded-button,
+.glass-danger-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border-radius: 0.75rem;
+  padding: 0.375rem 0.65rem;
+  color: rgb(51 65 85);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.glass-danger-button {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(254, 226, 226, 0.72);
+  color: rgb(185 28 28);
+}
+
+.glass-icon-button::after,
+.glass-pill-button::after,
+.glass-primary-button::after,
+.glass-menu-button::after,
+.glass-rounded-button::after,
+.glass-danger-button::after {
+  position: absolute;
+  inset: -2px;
+  content: '';
+}
+
 .glass-icon-button:hover,
 .glass-pill-button:hover,
-.glass-menu-button:hover {
+.glass-menu-button:hover,
+.glass-rounded-button:hover {
   background: rgba(255, 255, 255, 0.9);
 }
 
 .glass-icon-button:active,
 .glass-pill-button:active,
 .glass-primary-button:active,
-.glass-menu-button:active {
+.glass-menu-button:active,
+.glass-rounded-button:active,
+.glass-danger-button:active {
   transform: scale(0.97);
 }
 
 .dark .glass-icon-button,
 .dark .glass-pill-button,
-.dark .glass-menu-button {
+.dark .glass-menu-button,
+.dark .glass-rounded-button {
   --glass-fill: rgba(30, 41, 59, 0.64);
   --glass-border: rgba(100, 116, 139, 0.54);
   color: rgb(226 232 240);
+}
+
+.dark .glass-danger-button {
+  border-color: rgba(248, 113, 113, 0.34);
+  background: rgba(127, 29, 29, 0.45);
+  color: rgb(254 202 202);
 }
 
 .dark .glass-primary-button {
@@ -221,13 +268,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   .glass-icon-button,
   .glass-pill-button,
-  .glass-menu-button {
+  .glass-menu-button,
+  .glass-rounded-button {
     background: rgba(255, 255, 255, 0.96);
   }
 
   .dark .glass-icon-button,
   .dark .glass-pill-button,
-  .dark .glass-menu-button {
+  .dark .glass-menu-button,
+  .dark .glass-rounded-button {
     background: rgb(30 41 59);
   }
 }

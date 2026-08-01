@@ -73,7 +73,7 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   return confirming ? (
     <button aria-label="确认删除测站" onClick={() => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); }}
-      className="min-h-10 rounded-full bg-red-500 px-3 text-xs font-bold text-white shadow-sm shrink-0">确认删除</button>
+      className="glass-danger-button shrink-0">确认删除</button>
   ) : (
     <button aria-label="删除测站" onClick={(e) => { e.stopPropagation(); setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); }}
       className="glass-icon-button text-slate-400 hover:text-red-500">
@@ -110,7 +110,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
       }`}
     >
       {/* 头部：站号 + 绝对高程 */}
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-slate-100/50 dark:border-gray-700/50">
+      <div className="flex items-center justify-between border-b border-slate-100/50 px-2 py-1 dark:border-gray-700/50">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-500 text-white text-[11px] font-bold shadow-sm shadow-blue-500/20">
             {index + 1}
@@ -125,7 +125,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
       {/* 核心输入区：左右分栏 (后视 | 前视) */}
       <div className="grid grid-cols-2 divide-x divide-slate-100 dark:divide-gray-700/50">
         {/* 左侧：后视 */}
-        <div className="p-1.5 flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1 p-1.5">
           <div className="text-[10px] font-bold text-blue-600 dark:text-cyan-400 mb-0.5 text-center bg-blue-50/50 dark:bg-blue-900/20 rounded py-0.5 transition-colors">
             后视 {result.sniffedBackK ? `(${result.sniffedBackK})` : '(K值)'}
           </div>
@@ -153,7 +153,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
         </div>
 
         {/* 右侧：前视 */}
-        <div className="p-1.5 flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1 p-1.5">
           <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mb-0.5 text-center bg-emerald-50/50 dark:bg-emerald-900/20 rounded py-0.5 transition-colors">
             前视 {result.sniffedForeK ? `(${result.sniffedForeK})` : '(K值)'}
           </div>
@@ -191,7 +191,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
               && interResult.staffDiff > tolerance.maxBlackRedDiff;
 
             return (
-              <div data-testid="leveling-intermediate-readings" key={inter.id} className="relative flex flex-col gap-2 p-2 border-b border-violet-100/50 dark:border-violet-900/30 last:border-0">
+              <div data-testid="leveling-intermediate-readings" key={inter.id} className="relative flex flex-col gap-1 border-b border-violet-100/50 p-1.5 last:border-0 dark:border-violet-900/30">
                 <div className="flex items-center justify-between px-1">
                   <div className="text-[10px] font-bold text-violet-600 dark:text-violet-400">
                     🟣 间视 {i + 1} {interResult?.sniffedK ? `(${interResult.sniffedK})` : ''}
@@ -200,7 +200,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
                     {interResult && <div className="text-[10px] font-mono text-slate-500">
                       高程: <span className="text-violet-600 dark:text-violet-400 font-bold">{formatMetric(interResult.elevation, 3)}</span>
                     </div>}
-                    <button type="button" onClick={() => removeIntermediate(station.id, inter.id)} aria-label={`删除间视 ${i + 1}`} className="glass-icon-button text-slate-400 hover:text-red-500">
+                    <button type="button" onClick={() => removeIntermediate(station.id, inter.id)} aria-label={`删除间视 ${i + 1}`} className="glass-icon-button !min-h-9 !min-w-9 text-slate-400 hover:text-red-500">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -218,7 +218,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
 
       {/* 底部：计算结果折叠栏 */}
       <div className="flex items-center justify-between gap-1.5 border-t border-slate-100/50 bg-slate-50/80 px-2 py-1 dark:border-gray-700/50 dark:bg-gray-800/50">
-        <button type="button" onClick={() => setShowResults(!showResults)} aria-expanded={showResults} className="flex min-h-10 min-w-0 flex-1 items-center gap-1 rounded-full px-2 text-left text-xs font-semibold text-slate-600 hover:bg-white/75 dark:text-slate-300 dark:hover:bg-gray-700/70">
+        <button type="button" onClick={() => setShowResults(!showResults)} aria-expanded={showResults} className="flex min-h-9 min-w-0 flex-1 items-center gap-1 rounded-full px-2 text-left text-xs font-semibold text-slate-600 hover:bg-white/75 dark:text-slate-300 dark:hover:bg-gray-700/70">
           <Gauge className="w-3.5 h-3.5" /><span>计算结果</span>
           {showResults ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
@@ -253,7 +253,7 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
               </div>
             )}
 
-            <div className="flex items-center justify-between px-2 py-1.5 mt-1 rounded bg-blue-50/60 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50">
+            <div className="mt-1 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/60 px-2 py-1 dark:border-blue-800/50 dark:bg-blue-900/20">
                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{grade === 'out' ? '平均高差' : '高差中数'}</span>
                <span className="text-[13px] font-mono font-black text-blue-600 dark:text-cyan-400">{formatMetric(result.meanDeltaHeight, 3)} <span className="text-[10px] font-normal text-slate-400">m</span></span>
             </div>

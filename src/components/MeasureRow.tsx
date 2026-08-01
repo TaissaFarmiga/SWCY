@@ -93,7 +93,7 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02 }}
-      className="flex flex-col gap-1.5 px-1 py-1 rounded-lg bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-slate-200/60 dark:border-gray-700/50 shadow-sm overflow-hidden w-full min-w-0"
+      className="flex w-full min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-slate-200/60 bg-white/60 px-1 py-0.5 shadow-sm backdrop-blur-sm dark:border-gray-700/50 dark:bg-gray-800/60"
     >
       {/* ========= 公式模式：第一行 [ Kα | ▾⇊ | 🔄(靠右) ] ========= */}
       {mode === 'formula' && (
@@ -135,7 +135,7 @@ const MeasureRow = ({ verticalId, point, index }: Props) => {
             </div>
 
             {/* 模式切换按钮推到最右 */}
-            <button aria-label="切换为直接流速输入" onClick={handleModeToggle} className="flex min-h-11 min-w-11 items-center justify-center rounded bg-blue-500 text-white shadow-sm shrink-0 ml-auto transition-colors">
+            <button aria-label="切换为直接流速输入" onClick={handleModeToggle} className="glass-icon-button ml-auto shrink-0 text-blue-600 dark:text-cyan-300">
               <Calculator className="w-4 h-4" />
             </button>
           </div>

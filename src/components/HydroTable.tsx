@@ -60,7 +60,7 @@ export default function HydroTable() {
   }, [lastAddedVerticalId, setLastAddedVerticalId]);
 
   return (
-    <div className="flex flex-col gap-1.5 px-2 pb-20">
+    <div className="flex flex-col gap-1.5 px-2 pb-8">
 
       {/* 水位/断面折叠面板 */}
       <AnimatePresence>
@@ -109,7 +109,7 @@ export default function HydroTable() {
                   {([
                     ['stationCode', '测站编码'], ['riverName', '河流名称'], ['operator', '施测人员'], ['recorder', '记录人员'],
                     ['reviewer', '复核人员'], ['weather', '天气'], ['waterCondition', '水情'],
-                  ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRun[key] ?? ''} placeholder={placeholder} onChange={(event) => updateRunMeta(currentRun.id, key, event.target.value)} className="min-h-11 min-w-0 rounded-md border border-slate-200 bg-white/80 px-2 text-sm outline-none focus:border-hydro-blue dark:border-gray-600 dark:bg-gray-800/80 dark:text-slate-200" />)}
+                  ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRun[key] ?? ''} placeholder={placeholder} onChange={(event) => updateRunMeta(currentRun.id, key, event.target.value)} className="min-h-10 min-w-0 rounded-lg border border-slate-200 bg-white/80 px-2 text-sm outline-none focus:border-hydro-blue dark:border-gray-600 dark:bg-gray-800/80 dark:text-slate-200" />)}
                   <textarea value={currentRun.notes ?? ''} placeholder="备注" onChange={(event) => updateRunMeta(currentRun.id, 'notes', event.target.value)} className="min-h-16 min-w-0 resize-y rounded-md border border-slate-200 bg-white/80 px-2 py-2 text-sm outline-none focus:border-hydro-blue dark:border-gray-600 dark:bg-gray-800/80 dark:text-slate-200 min-[360px]:col-span-2" />
                 </div>
               </div>
@@ -128,7 +128,7 @@ export default function HydroTable() {
       </div>
 
       <button data-testid="flow-add-vertical" onClick={addVertical}
-        className="flex min-h-11 items-center justify-center gap-1 p-1.5 rounded-lg bg-white/40 dark:bg-gray-900/40 border border-dashed border-slate-300 dark:border-gray-600 text-sm text-slate-500 dark:text-slate-400 hover:border-hydro-blue dark:hover:border-hydro-blue-light hover:text-hydro-blue dark:hover:text-cyan-400 transition-colors">
+        className="glass-primary-button w-full text-sm">
         <Plus className="w-3.5 h-3.5" /><span>添加测速垂线</span>
       </button>
     </div>

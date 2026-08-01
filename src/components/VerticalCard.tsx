@@ -4,7 +4,7 @@
  */
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef, memo } from 'react';
-import { ChevronDown, ChevronUp, Trash2, Plus, Target, Gauge, ArrowLeftRight, MoreHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Plus, Target, Gauge, ArrowLeftRight } from 'lucide-react';
 import { Vertical, MeasureMethod, METHOD_LABELS, getAvailableMethods } from '../types';
 import MeasureRow from './MeasureRow';
 import { useHydroStore } from '../store/hydroStore';
@@ -114,11 +114,11 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
 
   return (
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="rounded-lg bg-gradient-to-r from-amber-50/90 to-orange-50/70 dark:from-amber-950/80 dark:to-orange-950/70 border border-amber-200/60 dark:border-amber-800/40"
+      className="rounded-xl border border-amber-200/60 bg-gradient-to-r from-amber-50/90 to-orange-50/70 shadow-glass dark:border-amber-800/40 dark:from-amber-950/80 dark:to-orange-950/70"
     >
-      <div className="w-full flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-1.5 py-2">
+      <div className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1.5 py-1">
         <button onClick={swapEdges}
-          className="flex min-h-11 items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100/60 dark:bg-amber-900/40 hover:bg-amber-200/60 dark:hover:bg-amber-800/40 transition-colors flex-shrink-0"
+          className="glass-rounded-button flex-shrink-0 text-amber-700 dark:text-amber-300"
           title="点击互换左右水边">
           <span className="text-sm font-bold text-amber-700 dark:text-amber-300">{vertical.name}</span>
           <ArrowLeftRight className="w-2.5 h-2.5 text-amber-400" />
@@ -146,7 +146,7 @@ function EdgeCard({ vertical, index, isLast }: { vertical: Vertical; index: numb
       {isEndBank && (
         <>
           <button onClick={() => setShowResults(!showResults)}
-            className="w-full min-h-11 flex items-center justify-between px-1.5 py-0.5 bg-gradient-to-r from-amber-50/30 dark:from-amber-900/20 to-transparent hover:from-amber-50/50 dark:hover:from-amber-900/30 transition-colors">
+            className="flex min-h-9 w-full items-center justify-between bg-gradient-to-r from-amber-50/30 to-transparent px-1.5 py-0.5 transition-colors hover:from-amber-50/50 dark:from-amber-900/20 dark:hover:from-amber-900/30">
             <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
               <Gauge className="w-3 h-3" /><span>结束岸结果</span>
             </div>
@@ -177,63 +177,25 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   return confirming ? (
     <button aria-label="确认删除测速垂线" onClick={() => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); }}
-      className="min-h-11 w-full rounded-full bg-red-500 px-3 text-xs font-bold text-white dark:bg-red-600">确认删除</button>
+      className="glass-danger-button shrink-0">确认删除</button>
   ) : (
     <button aria-label="删除测速垂线" onClick={(e) => { e.stopPropagation(); setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); }}
-      className="glass-menu-button w-full text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200" title="删除此垂线（需二次确认）">
-      <Trash2 className="h-4 w-4" />删除垂线
+      className="glass-icon-button shrink-0 text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200" title="删除此垂线（需二次确认）">
+      <Trash2 className="h-4 w-4" />
     </button>
   );
 }
 
-/** 测法选择器 Popover（废弃原生 select） */
+/** 紧凑原生测法选择器：减少卡片内二级菜单。 */
 function MeasureMethodPopover({ value, methods, onChange }: { value: MeasureMethod; methods: MeasureMethod[]; onChange: (m: MeasureMethod) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    if (open) document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
   return (
-    <div className="relative w-[72px] shrink-0" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-          className="w-full min-h-11 flex items-center justify-between px-1.5 py-0.5 text-[11px] rounded-md bg-slate-50 dark:bg-gray-800 border border-slate-200 dark:border-gray-700 dark:text-slate-300 outline-none cursor-pointer shrink-0 hover:border-hydro-blue/50 transition-colors"
-      >
-        <span className="font-medium">{METHOD_LABELS[value]}</span>
-        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -2 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -2 }}
-            transition={{ duration: 0.12 }}
-            className="absolute z-50 mt-1 left-0 min-w-[100px] backdrop-blur-xl bg-white/75 dark:bg-gray-800/80 border border-white/30 dark:border-gray-600 shadow-2xl rounded-xl overflow-hidden"
-          >
-            {methods.map((m) => (
-              <button
-                key={m}
-                onClick={() => { onChange(m); setOpen(false); }}
-                className={`w-full min-h-11 text-left px-3 py-1.5 text-xs transition-colors ${
-                  m === value
-                    ? 'bg-blue-50/80 dark:bg-blue-900/40 text-hydro-blue dark:text-cyan-400 font-bold'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-white/50 dark:hover:bg-gray-700/50'
-                }`}
-              >
-                {METHOD_LABELS[m]}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <label className="relative w-[78px] shrink-0">
+      <span className="sr-only">测法</span>
+      <select value={value} onChange={(event) => onChange(event.target.value as MeasureMethod)} className="min-h-10 w-full appearance-none rounded-xl border border-white/80 bg-white/70 px-2 pr-6 text-[11px] font-semibold text-slate-700 shadow-glass outline-none backdrop-blur-xl dark:border-gray-700/70 dark:bg-gray-800/70 dark:text-slate-200">
+        {methods.map((method) => <option key={method} value={method}>{METHOD_LABELS[method]}</option>)}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+    </label>
   );
 }
 
@@ -248,7 +210,6 @@ function MeasureCard({ vertical, index }: Props) {
 
   const availableMethods = getAvailableMethods(flowPeriod);
   const [showResults, setShowResults] = useState(false);
-  const [showActions, setShowActions] = useState(false);
   const waterDepthNum = parseFloat(vertical.waterDepth || '0');
   const isShallow = waterDepthNum > 0 && waterDepthNum < 0.2;
   const isDistanceError = calcDistanceError(verticals, index);
@@ -260,7 +221,7 @@ function MeasureCard({ vertical, index }: Props) {
     <motion.div id={`vertical-${vertical.id}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="rounded-lg bg-white/70 dark:bg-gray-900/70 border border-white/80 dark:border-gray-700/80"
     >
-      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-slate-100/50 px-2 py-1.5 dark:border-gray-700/50">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 border-b border-slate-100/50 px-2 py-1 dark:border-gray-700/50">
         <div className="flex items-center justify-center w-5 h-5 rounded-md bg-hydro-blue text-white text-sm font-bold flex-shrink-0">
           {measureIndex}
         </div>
@@ -319,26 +280,17 @@ function MeasureCard({ vertical, index }: Props) {
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-1 rounded-b-xl bg-gray-50 px-2 py-1 dark:bg-gray-800/50">
-        <button type="button" onClick={() => setShowResults(!showResults)} aria-expanded={showResults} className="flex min-h-10 min-w-0 flex-1 items-center gap-1 rounded-full px-2 text-left hover:bg-white/75 dark:hover:bg-gray-700/70">
+      <div className="flex items-center justify-between gap-1 rounded-b-xl bg-gray-50 px-2 py-0.5 dark:bg-gray-800/50">
+        <button type="button" onClick={() => setShowResults(!showResults)} aria-expanded={showResults} className="flex min-h-9 min-w-0 flex-1 items-center gap-1 rounded-full px-2 text-left hover:bg-white/75 dark:hover:bg-gray-700/70">
           <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <Gauge className="w-3 h-3" /><span>计算结果</span>
             {isShallow && <span className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 text-[10px]">浅水区</span>}
           </div>
           {showResults ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
         </button>
-        <div className="relative shrink-0">
-          <button type="button" aria-label="垂线更多操作" aria-expanded={showActions} onClick={() => setShowActions((value) => !value)} className="glass-icon-button">
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          <AnimatePresence>
-            {showActions && (
-              <motion.div initial={{ opacity: 0, scale: 0.96, y: 4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96, y: 4 }} className="absolute bottom-[calc(100%+0.25rem)] right-0 z-30 flex min-w-32 flex-col gap-1 rounded-2xl border border-white/75 bg-white/90 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/90">
-                <button type="button" onClick={() => { insertVerticalAfter(vertical.id); setShowActions(false); }} className="glass-menu-button"><Plus className="h-4 w-4" />添加垂线</button>
-                <ConfirmDeleteButton onDelete={() => deleteVertical(vertical.id)} />
-              </motion.div>
-            )}
-          </AnimatePresence>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" aria-label="在此垂线后添加垂线" onClick={() => insertVerticalAfter(vertical.id)} className="glass-icon-button text-blue-600 dark:text-cyan-300"><Plus className="h-4 w-4" /></button>
+          <ConfirmDeleteButton onDelete={() => deleteVertical(vertical.id)} />
         </div>
       </div>
 

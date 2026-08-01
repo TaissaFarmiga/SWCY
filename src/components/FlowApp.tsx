@@ -124,9 +124,9 @@ function DeleteRunButton({ onDelete }: { onDelete: () => void }) {
   const tap1 = () => { setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); };
   const tap2 = () => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); };
   return confirming ? (
-    <button aria-label="确认删除测次" onClick={tap2} className="min-h-11 min-w-11 rounded bg-red-500 dark:bg-red-600 text-white text-[9px] font-bold animate-pulse shrink-0">确认删除</button>
+    <button aria-label="确认删除测次" onClick={tap2} className="glass-danger-button shrink-0 animate-pulse">确认删除</button>
   ) : (
-    <button aria-label="删除测次" onClick={(e) => { e.stopPropagation(); tap1(); }} className="flex min-h-11 min-w-11 items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-500 shrink-0" title="删除测次（二次确认）">
+    <button aria-label="删除测次" onClick={(e) => { e.stopPropagation(); tap1(); }} className="glass-icon-button shrink-0 text-slate-400 hover:text-red-500" title="删除测次（二次确认）">
       <Trash2 className="w-3 h-3" />
     </button>
   );
@@ -329,10 +329,11 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10">
         <header data-testid="flow-app-header" className="app-safe-header relative z-30 border-b border-white/70 bg-[#F2F2F7]/82 backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-950/82">
-          <div className="flex min-h-12 items-center gap-1 px-2 py-1">
+          <div className="flex min-h-11 items-center gap-0.5 px-1.5 py-0.5">
             <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button"><ChevronLeft className="h-5 w-5" /></button>
-            <div className="min-w-0 flex-1 px-1"><h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">水文测验</h1><p className="truncate text-xs text-slate-500 dark:text-slate-400">GB 50179-2015 · {measureCount} 条垂线</p></div>
+            <div className="min-w-0 flex-1 px-1"><h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">水文测验 <span className="text-[10px] font-medium text-slate-400">· {measureCount}线</span></h1></div>
             <button data-testid="flow-result" type="button" onClick={() => setShowCFDSheet(true)} aria-label="断面成果" title="断面成果" className="glass-icon-button"><Activity className="h-4 w-4" /></button>
+            <button data-testid="flow-history" type="button" onClick={toggleHistoryPanel} aria-label="历史测次" title="历史测次" className="glass-icon-button"><History className="h-4 w-4" /></button>
             <button data-testid="flow-more" type="button" onClick={() => setShowMore((value) => !value)} aria-label="更多功能" title="更多功能" aria-expanded={showMore} className="glass-icon-button"><MoreHorizontal className="h-5 w-5" /></button>
           </div>
         </header>
@@ -340,21 +341,25 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
 
         <AnimatePresence>
           {showMore && (
-            <motion.section data-testid="flow-more-menu" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="relative z-40 mx-2 mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/75 bg-white/84 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/84 min-[390px]:grid-cols-3">
-              <button type="button" onClick={() => { handleSaveTemplate(); setShowMore(false); }} className="glass-menu-button"><BookmarkPlus className="h-4 w-4" />存为模板</button>
-              <div ref={templateMenuRef} className="relative">
-                <button type="button" onClick={() => setShowTemplateMenu((value) => !value)} className="glass-menu-button w-full"><Layers className="h-4 w-4" />载入模板</button>
-                <AnimatePresence>
-                  {showTemplateMenu && <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="absolute left-0 top-[calc(100%+0.25rem)] z-50 max-h-64 w-64 overflow-y-auto rounded-2xl border border-white/75 bg-white/95 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/95">
-                    {templates.length === 0 ? <p className="px-3 py-3 text-xs text-slate-500">暂无断面模板</p> : templates.map((tpl) => <div key={tpl.id} className="flex items-center gap-1"><button type="button" onClick={() => { handleLoadTemplate(tpl); setShowMore(false); }} className="min-h-11 min-w-0 flex-1 truncate px-2 text-left text-xs text-slate-700 dark:text-slate-200">{tpl.name}</button><button type="button" aria-label={`删除模板 ${tpl.name}`} onClick={() => handleDeleteTemplate(tpl.id)} className="glass-icon-button"><Trash2 className="h-4 w-4" /></button></div>)}
-                  </motion.div>}
-                </AnimatePresence>
+            <motion.section data-testid="flow-more-menu" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="relative z-40 mx-1.5 mt-1 rounded-xl border border-white/75 bg-white/84 p-1 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/84">
+              <div className="grid grid-cols-2 gap-1 min-[390px]:grid-cols-3">
+                <button type="button" onClick={() => { handleSaveTemplate(); setShowMore(false); }} className="glass-menu-button"><BookmarkPlus className="h-4 w-4" />存为模板</button>
+                <button type="button" onClick={() => { handleImportClick(); setShowMore(false); }} className="glass-menu-button"><Download className="h-4 w-4" />导入备份</button>
+                <button type="button" onClick={() => { useHydroStore.getState().exportCurrentRunJSON(); setShowMore(false); }} className="glass-menu-button"><Upload className="h-4 w-4" />导出 JSON</button>
+                <button type="button" onClick={() => { exportData(); setShowMore(false); }} className="glass-menu-button"><FileSpreadsheet className="h-4 w-4" />导出 Excel</button>
+                <button type="button" onClick={() => { setDarkMode(!darkMode); setShowMore(false); }} className="glass-menu-button">{darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}{darkMode ? '浅色模式' : '深色模式'}</button>
               </div>
-              <button type="button" onClick={() => { handleImportClick(); setShowMore(false); }} className="glass-menu-button"><Download className="h-4 w-4" />导入备份</button>
-              <button type="button" onClick={() => { useHydroStore.getState().exportCurrentRunJSON(); setShowMore(false); }} className="glass-menu-button"><Upload className="h-4 w-4" />导出 JSON</button>
-              <button type="button" onClick={() => { exportData(); setShowMore(false); }} className="glass-menu-button"><FileSpreadsheet className="h-4 w-4" />导出 Excel</button>
-              <button type="button" onClick={() => { toggleHistoryPanel(); setShowMore(false); }} className="glass-menu-button"><History className="h-4 w-4" />历史测次</button>
-              <button type="button" onClick={() => { setDarkMode(!darkMode); setShowMore(false); }} className="glass-menu-button">{darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}{darkMode ? '浅色模式' : '深色模式'}</button>
+              {templates.length > 0 && (
+                <div className="mt-1 flex items-center gap-1 overflow-x-auto rounded-lg border border-white/70 bg-white/40 p-1 dark:border-gray-700/70 dark:bg-gray-800/45">
+                  <span className="flex shrink-0 items-center gap-1 px-1 text-[10px] font-bold text-slate-400"><Layers className="h-3.5 w-3.5" />模板</span>
+                  {templates.map((tpl) => (
+                    <div key={tpl.id} className="flex shrink-0 items-center rounded-full border border-white/80 bg-white/70 dark:border-gray-600/70 dark:bg-gray-800/75">
+                      <button type="button" onClick={() => { handleLoadTemplate(tpl); setShowMore(false); }} className="min-h-9 max-w-32 truncate px-2 text-xs font-semibold text-slate-700 dark:text-slate-200">{tpl.name}</button>
+                      <button type="button" aria-label={`删除模板 ${tpl.name}`} onClick={() => handleDeleteTemplate(tpl.id)} className="flex min-h-9 min-w-9 items-center justify-center rounded-full text-slate-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.section>
           )}
         </AnimatePresence>
@@ -558,9 +563,8 @@ export default function FlowApp({ isActive = true, onBack }: { isActive?: boolea
           </AnimatePresence>
         </div>
 
-        <div className="flex items-center justify-center gap-2 px-2">
+        <div className="flex items-center justify-center px-2 pt-1">
           <PeriodToggle />
-          <button type="button" onClick={() => setShowCFDSheet(true)} className="glass-pill-button"><Activity className="h-4 w-4" />断面成果</button>
         </div>
         <HydroTable />
 

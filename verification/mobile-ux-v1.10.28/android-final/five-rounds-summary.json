@@ -1,0 +1,167 @@
+﻿{
+    "schemaVersion":  1,
+    "appVersion":  "1.10.28",
+    "requestedRounds":  5,
+    "mode":  "all",
+    "startedAt":  "2026-08-01T09:12:03.2434941Z",
+    "completedAt":  "2026-08-01T09:30:36.1157335Z",
+    "status":  "passed",
+    "rounds":  [
+                   {
+                       "round":  1,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-01T09:12:03.2697903Z",
+                       "completedAt":  "2026-08-01T09:15:57.3263473Z",
+                       "durationSeconds":  234.1,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.28\\android-final\\round-01\\junit-01.xml",
+                                         "sha256":  "476d14c8d85df00c783a2a516596ea859782a3e72d4e8b2ec3b981d27ce0dba8"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "81063b9ab9ba297370068b30a0b4f300fdff049d38f81554ad105811eeda3712"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "1a0bee914d0637c494f5b86d59c49c7d5b5927627467a69b174b1ffdb69ab5e0"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "eda493583428aead3f6b77c5e1e3bb49574019d1b5fa29bff769cbc0fc72f6db"
+                                           }
+                                       ]
+                   },
+                   {
+                       "round":  2,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-01T09:15:57.3492197Z",
+                       "completedAt":  "2026-08-01T09:19:42.0017387Z",
+                       "durationSeconds":  224.7,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.28\\android-final\\round-02\\junit-01.xml",
+                                         "sha256":  "ce3d5e45c476a7840dc572cb6353219e13f522467a205c2cfe592fba8d3a3c3b"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "81063b9ab9ba297370068b30a0b4f300fdff049d38f81554ad105811eeda3712"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "1a0bee914d0637c494f5b86d59c49c7d5b5927627467a69b174b1ffdb69ab5e0"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "eda493583428aead3f6b77c5e1e3bb49574019d1b5fa29bff769cbc0fc72f6db"
+                                           }
+                                       ]
+                   },
+                   {
+                       "round":  3,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-01T09:19:42.0057394Z",
+                       "completedAt":  "2026-08-01T09:23:19.2795422Z",
+                       "durationSeconds":  217.3,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.28\\android-final\\round-03\\junit-01.xml",
+                                         "sha256":  "926ccaeeaaa8c8b6100c49fadb14b3e3e309a415abe6dc7b5479a224d93cf490"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "81063b9ab9ba297370068b30a0b4f300fdff049d38f81554ad105811eeda3712"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "1a0bee914d0637c494f5b86d59c49c7d5b5927627467a69b174b1ffdb69ab5e0"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "b72d2e4a296c2e942035395f42c439dfafc2a93be335befae92c951518a58179"
+                                           }
+                                       ]
+                   },
+                   {
+                       "round":  4,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-01T09:23:19.2825431Z",
+                       "completedAt":  "2026-08-01T09:26:55.0301886Z",
+                       "durationSeconds":  215.7,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.28\\android-final\\round-04\\junit-01.xml",
+                                         "sha256":  "5dcae6450d9c786b8983dd5136d00c7cb4244e3945cba0216ed0880a5e1d275d"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "81063b9ab9ba297370068b30a0b4f300fdff049d38f81554ad105811eeda3712"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "1a0bee914d0637c494f5b86d59c49c7d5b5927627467a69b174b1ffdb69ab5e0"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "eda493583428aead3f6b77c5e1e3bb49574019d1b5fa29bff769cbc0fc72f6db"
+                                           }
+                                       ]
+                   },
+                   {
+                       "round":  5,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-01T09:26:55.0334588Z",
+                       "completedAt":  "2026-08-01T09:30:36.1101772Z",
+                       "durationSeconds":  221.1,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.28\\android-final\\round-05\\junit-01.xml",
+                                         "sha256":  "c99a2abb862f1c2051a040ba55e30a913911f84a2d7ece26411c6ffa7d3c5f13"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "81063b9ab9ba297370068b30a0b4f300fdff049d38f81554ad105811eeda3712"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "1a0bee914d0637c494f5b86d59c49c7d5b5927627467a69b174b1ffdb69ab5e0"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "eda493583428aead3f6b77c5e1e3bb49574019d1b5fa29bff769cbc0fc72f6db"
+                                           }
+                                       ]
+                   }
+               ],
+    "completedRounds":  5
+}

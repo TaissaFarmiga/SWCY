@@ -337,7 +337,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
     return (
       <main className="app-safe-screen relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center justify-center px-4 pb-28 text-center">
-        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="app-safe-floating-top absolute left-3 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95 dark:text-slate-300 dark:hover:bg-gray-800/60">
+        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button app-safe-floating-top absolute left-3">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-white/80 bg-white/65 shadow-lg backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/60">
@@ -352,7 +352,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
             type="button"
             onClick={requestAccess}
             disabled={permissionState === 'requesting'}
-            className="mt-7 flex min-h-12 min-w-44 items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-6 font-bold text-white shadow-lg shadow-cyan-500/25 active:scale-95 disabled:opacity-60"
+            className="glass-primary-button mt-6 min-w-40 disabled:opacity-60"
           >
             <RefreshCcw className={`h-4 w-4 ${permissionState === 'requesting' ? 'animate-spin' : ''}`} />
             {permissionState === 'requesting' ? '正在请求权限' : noData || denied || failed ? '重新尝试' : '启动传感器'}
@@ -377,8 +377,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="app-safe-screen mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center overflow-x-hidden px-3 pb-28 min-[360px]:px-4">
-      <header className="relative mb-5 w-full min-h-11 text-center">
-        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="absolute left-0 top-0 flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-white/60 active:scale-95 dark:text-slate-300 dark:hover:bg-gray-800/60">
+      <header className="relative mb-3 min-h-10 w-full text-center">
+        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button absolute left-0 top-0">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="px-12">
@@ -388,7 +388,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         </div>
       </header>
 
-      <section aria-live="polite" className="mb-4 w-full max-w-sm rounded-3xl border border-white/80 bg-white/65 p-4 shadow-glass backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/60">
+      <section aria-live="polite" className="mb-3 w-full max-w-sm rounded-2xl border border-white/80 bg-white/65 p-3 shadow-glass backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/60">
         <div className="flex items-center justify-between gap-3">
           <div>
             <span className="block text-xs text-slate-500">中心偏差</span>
@@ -405,7 +405,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         </div>
       </section>
 
-      <section className="relative flex h-[min(78vw,280px)] w-[min(78vw,280px)] min-h-[240px] min-w-[240px] items-center justify-center" aria-label="电子气泡靶盘">
+      <section className="relative flex h-[min(72vw,260px)] w-[min(72vw,260px)] min-h-[220px] min-w-[220px] items-center justify-center" aria-label="电子气泡靶盘">
         <div className="absolute inset-0 rounded-full border-2 border-white/70 bg-white/45 shadow-[inset_0_4px_20px_rgba(0,0,0,0.05),0_8px_32px_rgba(0,0,0,0.08)] backdrop-blur-xl dark:border-gray-700/60 dark:bg-gray-900/40" />
         <div className={`absolute h-[72%] w-[72%] rounded-full border-2 border-dashed ${ringColor}`} />
         <div className={`absolute h-[36%] w-[36%] rounded-full border ${ringColor}`} />
@@ -420,12 +420,12 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         </motion.div>
       </section>
 
-      <section className="mt-5 grid w-full max-w-sm grid-cols-2 gap-2">
+      <section className="mt-4 grid w-full max-w-sm grid-cols-2 gap-2">
         <button
           type="button"
           onClick={calibrate}
           disabled={!reading}
-          className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-cyan-500 px-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 active:scale-95 disabled:opacity-40"
+          className="glass-primary-button disabled:opacity-40"
         >
           <Gauge className="h-4 w-4" />归零校准
         </button>
@@ -433,7 +433,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
           type="button"
           onClick={resetCalibration}
           disabled={!isCalibrated}
-          className="flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-white/80 bg-white/70 px-3 text-sm font-bold text-slate-600 shadow-glass active:scale-95 disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800/60 dark:text-slate-300"
+          className="glass-rounded-button disabled:opacity-40"
         >
           <RotateCcw className="h-4 w-4" />取消校准
         </button>

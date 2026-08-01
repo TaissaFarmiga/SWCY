@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="com.hydro.geekterminal.ColdStartInstrumentedTest" tests="5" failures="0" errors="0" skipped="0" time="100.604" timestamp="2026-08-01T09:23:13" hostname="localhost">
+  <properties>
+    <property name="device" value="hydro_all_api35_44052(AVD) - 15" />
+    <property name="flavor" value="smoke" />
+    <property name="project" value=":app" />
+  </properties>
+  <testcase name="packageAndVersionMatchSmokeVariant" classname="com.hydro.geekterminal.ColdStartInstrumentedTest" time="0.018" />
+  <testcase name="coldStartShowsCapacitorWebView" classname="com.hydro.geekterminal.ColdStartInstrumentedTest" time="3.315" />
+  <testcase name="fullOfflineSafeAreaPersistenceAndShareJourney" classname="com.hydro.geekterminal.HydroSmokeInstrumentedTest" time="17.66" />
+  <testcase name="captureRealHomeFlowAndLevelingScreens" classname="com.hydro.geekterminal.StoreScreenshotInstrumentedTest" time="9.196" />
+  <testcase name="repeatedNavigationPersistenceAndRecreationStayBounded" classname="com.hydro.geekterminal.HydroStressInstrumentedTest" time="69.302" />
+</testsuite>

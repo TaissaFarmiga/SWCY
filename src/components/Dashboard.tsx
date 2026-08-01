@@ -7,7 +7,7 @@
  * 3. 按钮全部挂载 Zustand store actions，与 HydroTable 面板联动。
  */
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Plus, History, Play, Square } from 'lucide-react';
+import { ChevronDown, Plus, Play, Square } from 'lucide-react';
 import { useState } from 'react';
 import { useHydroStore } from '../store/hydroStore';
 import SaveHub from './SaveHub';
@@ -15,7 +15,7 @@ import SaveHub from './SaveHub';
 // Liquid Glass 风格微缩数据块 (统一宽度)
 function StatPill({ label, value, unit }: { label: string; value?: string; unit: string }) {
   return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/60 dark:bg-gray-800/60 backdrop-blur-md border border-white/80 dark:border-gray-700/60 shadow-sm w-full">
+    <div className="flex w-full items-center justify-between rounded-xl border border-white/80 bg-white/60 px-2 py-1 shadow-glass backdrop-blur-md dark:border-gray-700/60 dark:bg-gray-800/60">
       {/* 1. 左侧标签：固定宽度，严格靠左对齐 */}
       <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium w-12 text-left shrink-0">
         {label}
@@ -55,11 +55,7 @@ function GlassButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`flex min-h-11 min-w-11 items-center justify-center gap-1 px-2 py-1.5 rounded-lg backdrop-blur-md border shadow-sm transition-all active:scale-95 shrink-0 disabled:opacity-40 ${
-        highlight
-          ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/20 hover:bg-blue-700'
-          : 'bg-white/60 dark:bg-gray-800/60 border-white/80 dark:border-gray-600/50 text-slate-700 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-gray-700/80'
-      } ${className}`}
+      className={`${highlight ? 'glass-primary-button' : 'glass-rounded-button'} shrink-0 disabled:opacity-40 ${className}`}
     >
       {children}
     </button>
@@ -68,10 +64,8 @@ function GlassButton({
 
 export default function Dashboard() {
   const currentRun = useHydroStore((s) => s.currentRun);
-  const runsLen = useHydroStore((s) => s.runs.length);
   const createRun = useHydroStore((s) => s.createRun);
   const markTime = useHydroStore((s) => s.markTime);
-  const toggleHistoryPanel = useHydroStore((s) => s.toggleHistoryPanel);
   const [expanded, setExpanded] = useState(false);
 
   // 格式化时间显示 (HH:mm) — 兼容 ISO 与 MM/DD HH:mm 两种格式
@@ -104,17 +98,17 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="relative z-10 px-2 py-2 space-y-2 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
+    <div className="relative z-10 space-y-1 bg-gradient-to-b from-[#F2F2F7]/80 to-transparent px-2 py-1 backdrop-blur-sm dark:from-gray-950/80">
       {/* 第一行：核心数据 + 展开按钮 */}
       <div className="relative pr-10">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1">
           {primaryStats.map((s) => (
             <StatPill key={s.label} {...s} />
           ))}
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="absolute right-0 top-1/2 flex min-h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg bg-white/40 dark:bg-gray-800/40 border border-white/60 dark:border-gray-700/60 shadow-sm active:scale-95 transition-all shrink-0"
+          className="glass-icon-button absolute right-0 top-1/2 -translate-y-1/2"
           title={expanded ? '收起' : '展开更多数据'}
         >
           <ChevronDown
@@ -133,7 +127,7 @@ export default function Dashboard() {
             className="overflow-hidden"
           >
             <div className="pr-10">
-              <div className="grid grid-cols-2 gap-2 pb-1">
+              <div className="grid grid-cols-2 gap-1 pb-1">
                 {secondaryStats.map((s) => (
                   <StatPill key={s.label} {...s} />
                 ))}
@@ -151,15 +145,6 @@ export default function Dashboard() {
           <GlassButton onClick={() => createRun()} highlight className="px-2.5" title="新建测次">
             <Plus className="w-4 h-4 stroke-[2.5]" />
           </GlassButton>
-
-          {/* 历史记录 */}
-          <GlassButton onClick={toggleHistoryPanel} className="min-w-[50px]" title="历史记录">
-            <History className="w-3.5 h-3.5" />
-            <span className="text-[11px] font-bold font-mono">{runsLen}</span>
-          </GlassButton>
-
-          {/* 分隔符 */}
-          <div className="w-px h-5 bg-slate-300/50 dark:bg-gray-600/50 mx-0.5 shrink-0" />
 
           {/* 开始打卡 */}
           <GlassButton

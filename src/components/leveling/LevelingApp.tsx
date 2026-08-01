@@ -32,9 +32,7 @@ const getLocalDatetime = (isoStr?: string) => {
 
 function GlassButton({ children, onClick, className = '', highlight = false, disabled = false, title }: { children: React.ReactNode; onClick?: () => void; className?: string; highlight?: boolean; disabled?: boolean; title?: string; }) {
   return (
-    <button onClick={onClick} disabled={disabled} title={title} className={`flex min-h-11 min-w-11 items-center justify-center gap-1 px-2 py-1.5 rounded-lg backdrop-blur-md border shadow-sm transition-all active:scale-95 shrink-0 disabled:opacity-40 ${
-      highlight ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/20 hover:bg-blue-700' : 'bg-white/60 dark:bg-gray-800/60 border-white/80 dark:border-gray-600/50 text-slate-700 dark:text-slate-200 hover:bg-white/80 dark:hover:bg-gray-700/80'
-    } ${className}`}>
+    <button onClick={onClick} disabled={disabled} title={title} className={`${highlight ? 'glass-primary-button' : 'glass-rounded-button'} shrink-0 disabled:opacity-40 ${className}`}>
       {children}
     </button>
   );
@@ -47,9 +45,9 @@ function DeleteRouteButton({ onDelete }: { onDelete: () => void }) {
   const tap1 = () => { setConfirming(true); timerRef.current = setTimeout(() => setConfirming(false), 3000); };
   const tap2 = () => { if (timerRef.current) clearTimeout(timerRef.current); setConfirming(false); onDelete(); };
   return confirming ? (
-    <button aria-label="确认删除历史任务" onClick={(e) => { e.stopPropagation(); tap2(); }} className="min-h-11 min-w-11 p-0.5 rounded bg-red-500 text-white text-[9px] font-bold animate-pulse shrink-0">确认</button>
+    <button aria-label="确认删除历史任务" onClick={(e) => { e.stopPropagation(); tap2(); }} className="glass-danger-button shrink-0 animate-pulse">确认</button>
   ) : (
-    <button aria-label="删除历史任务" onClick={(e) => { e.stopPropagation(); tap1(); }} className="min-h-11 min-w-11 p-0.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 shrink-0"><Trash2 className="w-3 h-3" /></button>
+    <button aria-label="删除历史任务" onClick={(e) => { e.stopPropagation(); tap1(); }} className="glass-icon-button shrink-0 text-slate-400 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
   );
 }
 
@@ -166,14 +164,6 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
   const calculation = currentRoute.calculation;
   const isErrorOverLimit = calculation.isWithinTolerance === false;
   const evalStatus = calculation.isWithinTolerance === null ? '待闭合' : calculation.isWithinTolerance ? '合格' : '超限';
-  const routeTypeLabel = currentRoute.routeType === 'attached'
-    ? '附合水准路线'
-    : currentRoute.routeType === 'closed'
-      ? '闭合水准路线'
-      : currentRoute.routeType === 'round-trip'
-        ? '往返水准路线'
-        : '开放水准路线';
-
   const sortedRoutes = useMemo(() => routes.slice().sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 10), [routes]);
   const getHistoryName = (route: LevelingRoute) => {
     const targetTime = route.startTime || route.createdAt;
@@ -191,17 +181,15 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
     <div data-testid="leveling-screen" className="min-h-screen pb-8 bg-gradient-to-br from-[#F2F2F7] to-slate-100 dark:from-gray-950 dark:to-slate-900 overflow-x-hidden">
 
       <header data-testid="leveling-app-header" className="app-safe-header relative z-30 border-b border-white/70 bg-[#F2F2F7]/82 backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-950/82">
-        <div className="flex min-h-12 items-center gap-1 px-2 py-1">
+        <div className="flex min-h-11 items-center gap-0.5 px-1.5 py-0.5">
           <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="min-w-0 flex-1 px-1">
-            <h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">{currentRoute.name || '水准测量'}</h1>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{routeTypeLabel} · {currentRoute.direction === 'return' ? '返测中' : '往测中'}</p>
-          </div>
+          <div className="min-w-0 flex-1 px-1"><h1 className="truncate text-sm font-bold text-slate-800 dark:text-white">{currentRoute.name || '水准测量'} <span className="text-[10px] font-medium text-slate-400">· {currentRoute.direction === 'return' ? '返' : '往'}</span></h1></div>
           <button data-testid="leveling-result" type="button" onClick={() => setShowResultDrawer(true)} aria-label="成果表" title="成果表" className="glass-icon-button">
             <BarChart3 className="h-4 w-4" />
           </button>
+          <button data-testid="leveling-profile" type="button" onClick={() => setShowProfileDrawer(true)} aria-label="纵断面" title="纵断面" className="glass-icon-button"><LineChart className="h-4 w-4" /></button>
           <button data-testid="leveling-more" type="button" onClick={() => setShowMore((value) => !value)} aria-label="更多功能" title="更多功能" aria-expanded={showMore} className="glass-icon-button">
             <MoreHorizontal className="h-5 w-5" />
           </button>
@@ -211,11 +199,10 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
 
       <AnimatePresence>
         {showMore && (
-          <motion.section data-testid="leveling-more-menu" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="relative z-20 mx-2 mt-2 grid grid-cols-2 gap-1.5 rounded-2xl border border-white/75 bg-white/82 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/82 min-[390px]:grid-cols-3">
-            <button type="button" onClick={() => { setShowProfileDrawer(true); setShowMore(false); }} className="glass-menu-button"><LineChart className="h-4 w-4" />纵断面</button>
-            <button type="button" onClick={() => { setShowRadarDrawer(true); setShowMore(false); }} className="glass-menu-button"><Navigation className="h-4 w-4" />测站轨迹</button>
+          <motion.section data-testid="leveling-more-menu" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="relative z-20 mx-1.5 mt-1 grid grid-cols-2 gap-1 rounded-xl border border-white/75 bg-white/82 p-1 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/82 min-[390px]:grid-cols-3">
+            <button data-testid="leveling-radar" type="button" onClick={() => { setShowRadarDrawer(true); setShowMore(false); }} className="glass-menu-button"><Navigation className="h-4 w-4" />测站轨迹</button>
             <button type="button" onClick={() => { toggleHistoryPanel(); setShowMore(false); }} className="glass-menu-button"><History className="h-4 w-4" />历史记录</button>
-            <button type="button" onClick={() => document.getElementById('leveling-import-input')?.click()} className="glass-menu-button"><Download className="h-4 w-4" />导入 JSON</button>
+            <button type="button" onClick={() => { document.getElementById('leveling-import-input')?.click(); setShowMore(false); }} className="glass-menu-button"><Download className="h-4 w-4" />导入 JSON</button>
             <button type="button" onClick={() => { useLevelingStore.getState().exportCurrentRouteJSON(); setShowMore(false); }} className="glass-menu-button"><Upload className="h-4 w-4" />导出 JSON</button>
             <button type="button" onClick={() => { void useLevelingStore.getState().exportData().catch(() => showNotice('Excel 导出失败')); setShowMore(false); }} className="glass-menu-button"><FileSpreadsheet className="h-4 w-4" />导出 Excel</button>
             <button type="button" onClick={() => { setDarkMode(!darkMode); setShowMore(false); }} className="glass-menu-button">{darkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4" />}{darkMode ? '浅色模式' : '深色模式'}</button>
@@ -225,8 +212,8 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
       </AnimatePresence>
 
       {/* 🚀 第 2 层：动态全息 HUD 仪表盘 (Universal HUD) */}
-      <div className="relative z-30 px-2 py-2 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
-        <div className="flex flex-col gap-2.5 p-3 rounded-[16px] bg-white/70 dark:bg-gray-900/60 border border-white/80 dark:border-gray-700/50 shadow-sm backdrop-blur-md">
+      <div className="relative z-30 px-2 py-1 bg-gradient-to-b from-[#F2F2F7]/80 dark:from-gray-950/80 to-transparent backdrop-blur-sm">
+        <div className="flex flex-col gap-1.5 rounded-[14px] border border-white/80 bg-white/70 p-2 shadow-sm backdrop-blur-md dark:border-gray-700/50 dark:bg-gray-900/60">
 
           {/* 上层：三大外业生命线指标 */}
           <div className="flex items-center justify-between divide-x divide-slate-200/50 dark:divide-gray-700/50">
@@ -264,7 +251,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
           </div>
 
           {/* 下层：智能变形质量雷达 */}
-          <div className="pt-2 border-t border-slate-100/80 dark:border-gray-800/80">
+          <div className="border-t border-slate-100/80 pt-1.5 dark:border-gray-800/80">
             {(evalStatus === "合格" || evalStatus === "超限") && calculation.closureErrorMm !== null && calculation.allowableErrorMm !== null ? (
               // 🎯 状态 B：闭合对账，呈现容差 Health Bar
               <div className="flex flex-col gap-1.5">
@@ -303,7 +290,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
         </div>
 
         {/* 🚀 第 3 层：极速打卡与存档枢纽 */}
-        <div className="flex items-center gap-1.5 w-full pt-1.5">
+        <div className="flex w-full items-center gap-1 pt-1">
           <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <GlassButton onClick={() => createRoute(currentRoute.grade)} highlight className="px-2.5" title="新建路线">
               <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -362,17 +349,17 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
         </AnimatePresence>
       </div>
 
-      <section className="px-2 pb-2">
-        <div className="flex min-h-12 items-center gap-2 rounded-2xl border border-white/75 bg-white/65 p-1.5 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/65">
+      <section className="px-2 pb-1.5">
+        <div className="flex min-h-11 items-center gap-1 rounded-xl border border-white/75 bg-white/65 p-1 shadow-glass backdrop-blur-2xl dark:border-gray-700/70 dark:bg-gray-900/65">
           <div role="radiogroup" aria-label="水准等级" className="flex min-w-0 flex-1 rounded-full bg-slate-100/85 p-0.5 dark:bg-gray-800/85">
             {([['out', '普通'], ['4', '四等'], ['3', '三等']] as const).map(([grade, label]) => (
-              <button key={grade} type="button" role="radio" aria-checked={currentRoute.grade === grade} onClick={() => changeGrade(grade)} className={`min-h-10 min-w-0 flex-1 rounded-full px-2 text-xs font-bold transition-colors ${currentRoute.grade === grade ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-700 dark:text-cyan-300' : 'text-slate-500 dark:text-slate-400'}`}>
+              <button key={grade} type="button" role="radio" aria-checked={currentRoute.grade === grade} onClick={() => changeGrade(grade)} className={`min-h-9 min-w-0 flex-1 rounded-full px-2 text-xs font-bold transition-colors ${currentRoute.grade === grade ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-700 dark:text-cyan-300' : 'text-slate-500 dark:text-slate-400'}`}>
                 {label}
               </button>
             ))}
           </div>
           {currentRoute.direction === 'return' ? (
-            <span data-testid="leveling-return-state" className="inline-flex min-h-10 shrink-0 items-center rounded-full bg-violet-100 px-3 text-xs font-bold text-violet-700 dark:bg-violet-900/35 dark:text-violet-300">返测中</span>
+            <span data-testid="leveling-return-state" className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-violet-100 px-3 text-xs font-bold text-violet-700 dark:bg-violet-900/35 dark:text-violet-300">返测中</span>
           ) : (
             <button data-testid="leveling-start-return" type="button" disabled={stationCount === 0} onClick={startReturnLeg} className="glass-pill-button shrink-0 disabled:opacity-40">开始返测</button>
           )}
@@ -432,7 +419,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
                 {([
                   ['taskNumber', '任务编号'], ['organization', '作业单位'], ['surveyor', '施测人员'], ['checker', '复核人员'],
                   ['backStaffNumber', '后尺编号'], ['foreStaffNumber', '前尺编号'], ['weather', '天气'], ['terrain', '地形'],
-                ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRoute[key] ?? ''} onChange={(event) => updateRouteMeta({ [key]: event.target.value })} placeholder={placeholder} className="min-h-11 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200" />)}
+                ] as const).map(([key, placeholder]) => <input key={key} type="text" value={currentRoute[key] ?? ''} onChange={(event) => updateRouteMeta({ [key]: event.target.value })} placeholder={placeholder} className="min-h-10 min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200" />)}
                 <textarea value={currentRoute.notes ?? ''} onChange={(event) => updateRouteMeta({ notes: event.target.value })} placeholder="备注" className="min-h-16 min-w-0 resize-y rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-gray-700 dark:bg-gray-900 dark:text-slate-200 min-[360px]:col-span-2" />
               </div>
 
@@ -476,10 +463,10 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
 
                       {/* 操作按钮组：固定在最右侧不被压缩 */}
                       <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                        <button onClick={() => addKnownPoint(kp.id)} aria-label={`在测点 ${idx + 1} 后添加测点`} className="flex min-h-11 min-w-11 items-center justify-center text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors shadow-sm bg-white border border-slate-200">
+                        <button onClick={() => addKnownPoint(kp.id)} aria-label={`在测点 ${idx + 1} 后添加测点`} className="glass-icon-button text-indigo-500 hover:text-indigo-700">
                           <Plus className="w-3.5 h-3.5 stroke-[3]" />
                         </button>
-                        <button onClick={() => removeKnownPoint(kp.id)} aria-label={`删除测点 ${idx + 1}`} className="flex min-h-11 min-w-11 items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors shadow-sm bg-white border border-slate-200">
+                        <button onClick={() => removeKnownPoint(kp.id)} aria-label={`删除测点 ${idx + 1}`} className="glass-icon-button text-slate-400 hover:text-red-500">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -488,7 +475,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
                   {(!currentRoute.knownPoints || currentRoute.knownPoints.length === 0) && (
                     <div className="flex flex-col items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-slate-200 dark:border-gray-700">
                       <span className="text-[10px] text-slate-400">暂无测点，闭合差与不符值将无法结算</span>
-                      <button onClick={() => addKnownPoint()} className="flex items-center gap-1 text-[10px] font-bold bg-white text-indigo-500 border border-slate-200 px-3 py-1.5 rounded-md shadow-sm">
+                      <button onClick={() => addKnownPoint()} className="glass-pill-button text-indigo-600">
                         <Plus className="w-3 h-3 stroke-[3]" /> 添加第一个测点
                       </button>
                     </div>
@@ -503,7 +490,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
 
 
       {/* 🏗️ 瀑布流测站 */}
-      <div className="px-2 pt-1 pb-6 space-y-2 relative z-0">
+      <div className="relative z-0 space-y-1.5 px-2 pb-4 pt-1">
         <AnimatePresence initial={false}>
           {stations.map((station, index) => {
             const startsReturn = station.direction === 'return' && (index === 0 || stations[index - 1]?.direction !== 'return');
@@ -517,7 +504,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
         </AnimatePresence>
 
         {stationCount === 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-16 flex flex-col items-center justify-center text-slate-400">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center py-10 text-slate-400">
             <Waves className="w-12 h-12 opacity-20 mb-3 text-indigo-500" />
             <p className="text-sm font-medium">暂无水准测站数据</p>
             <p className="text-[11px] opacity-70 mt-1">请点击下方按钮开始观测</p>
@@ -529,7 +516,7 @@ export function LevelingApp({ isActive = true, onBack }: { isActive?: boolean; o
           {isLocating ? (
             <><div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /><span>🛰️ 寻星定位中...</span></>
           ) : (
-            <><Plus className="w-4 h-4 stroke-[3]" /><span>添加测站并记录定位</span></>
+            <><Plus className="w-4 h-4 stroke-[3]" /><span>添加测站</span></>
           )}
         </button>
         {locationFailure && (
