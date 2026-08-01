@@ -141,8 +141,12 @@ async function githubRequest(token, endpoint, options = {}) {
 }
 
 function assertCleanWorktree(stage) {
-  const status = git(['status', '--porcelain'], { capture: true });
-  if (status) throw new Error(`${stage}检测到未提交修改；发布已停止，禁止自动 git add`);
+  const unstaged = git(['diff', '--name-only'], { capture: true });
+  const staged = git(['diff', '--cached', '--name-only'], { capture: true });
+  const untracked = git(['ls-files', '--others', '--exclude-standard'], { capture: true });
+  if (unstaged || staged || untracked) {
+    throw new Error(`${stage}检测到未提交修改；发布已停止，禁止自动 git add`);
+  }
 }
 
 function sha256(filePath) {
