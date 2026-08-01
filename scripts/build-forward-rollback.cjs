@@ -6,6 +6,7 @@ const { spawnSync } = require('node:child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const APK_RELATIVE_PATH = path.join('android', 'app', 'build', 'outputs', 'apk', 'enterprise', 'release', 'app-enterprise-release.apk');
+const LINEAGE_SIGNER = path.join(PROJECT_ROOT, 'scripts', 'sign-android-lineage.cjs');
 const REQUIRED_SIGNING_ENV = [
   'HYDRO_KEYSTORE_PATH',
   'HYDRO_KEYSTORE_PASSWORD',
@@ -28,6 +29,8 @@ const HELP = `
 
 也可使用环境变量：
   HYDRO_KEYSTORE_PATH HYDRO_KEYSTORE_PASSWORD HYDRO_KEY_ALIAS HYDRO_KEY_PASSWORD
+  HYDRO_SIGNING_LINEAGE_PATH HYDRO_LEGACY_KEYSTORE_PATH HYDRO_LEGACY_KEYSTORE_PASSWORD
+  HYDRO_LEGACY_KEY_ALIAS HYDRO_LEGACY_KEY_PASSWORD HYDRO_ROTATION_MIN_SDK_VERSION
 
 示例：
   npm run build:android:forward-rollback -- --ref backup/v1.10.26-pre-mobile-ux-20260730 --version 1.10.28 --output D:\\Releases\\Hydro
@@ -140,6 +143,39 @@ function sha256(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+function createTemporaryRoot() {
+  const configuredBase = process.env.HYDRO_ROLLBACK_TEMP_ROOT?.trim();
+  const base = configuredBase
+    ? path.resolve(configuredBase)
+    : process.platform === 'win32'
+      ? path.join(path.parse(PROJECT_ROOT).root, 'HydroBuildTemp')
+      : os.tmpdir();
+  if (process.platform === 'win32' && /[^\x20-\x7e]/.test(base)) {
+    fail(`HYDRO_ROLLBACK_TEMP_ROOT 必须使用纯 ASCII 路径，当前：${base}`);
+  }
+  fs.mkdirSync(base, { recursive: true });
+  return fs.mkdtempSync(path.join(base, 'hydro-forward-rollback-'));
+}
+
+function resolveAndroidSdk() {
+  const localProperties = path.join(PROJECT_ROOT, 'android', 'local.properties');
+  let configuredSdk = '';
+  if (fs.existsSync(localProperties)) {
+    const match = fs.readFileSync(localProperties, 'utf8').match(/^\s*sdk\.dir\s*=\s*(.+?)\s*$/m);
+    if (match) configuredSdk = match[1].replace(/\\:/g, ':').replace(/\\\\/g, '\\');
+  }
+  const candidates = [
+    process.env.ANDROID_SDK_ROOT,
+    process.env.ANDROID_HOME,
+    configuredSdk,
+    process.platform === 'win32' ? 'D:\\Android\\SDK' : '',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk') : '',
+  ].filter(Boolean).map((candidate) => path.resolve(candidate));
+  const sdk = candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory());
+  if (!sdk) fail('Android SDK 不存在。请设置 ANDROID_SDK_ROOT 或 android/local.properties 的 sdk.dir。');
+  return sdk;
+}
+
 function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
@@ -159,7 +195,13 @@ function main() {
   }
   const signingProperties = assertSigningInput(options);
   const sourceCommit = resolveCommit(options.ref);
-  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hydro-forward-rollback-'));
+  const androidSdk = resolveAndroidSdk();
+  const buildEnvironment = {
+    ...process.env,
+    ANDROID_SDK_ROOT: androidSdk,
+    ANDROID_HOME: androidSdk,
+  };
+  const temporaryRoot = createTemporaryRoot();
   const worktreePath = path.join(temporaryRoot, 'worktree');
   let worktreeAdded = false;
 
@@ -176,7 +218,7 @@ function main() {
     }
 
     process.stdout.write('[forward-rollback] 安装锁定依赖\n');
-    run(commandName('npm'), ['ci', '--no-audit', '--fund=false'], { cwd: worktreePath });
+    run(commandName('npm'), ['ci', '--no-audit', '--fund=false'], { cwd: worktreePath, env: buildEnvironment });
 
     sourcePackage.version = targetVersion.normalized;
     fs.writeFileSync(sourcePackagePath, `${JSON.stringify(sourcePackage, null, 2)}\n`, 'utf8');
@@ -185,14 +227,21 @@ function main() {
     }
 
     process.stdout.write(`[forward-rollback] 构建 enterprise release v${targetVersion.normalized}\n`);
-    run(commandName('npm'), ['run', 'build'], { cwd: worktreePath });
-    run(commandName('npx'), ['cap', 'sync', 'android'], { cwd: worktreePath });
+    run(commandName('npm'), ['run', 'build'], { cwd: worktreePath, env: buildEnvironment });
+    run(commandName('npx'), ['cap', 'sync', 'android'], { cwd: worktreePath, env: buildEnvironment });
     run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleEnterpriseRelease', '--no-daemon', '--console=plain'], {
       cwd: path.join(worktreePath, 'android'),
+      env: buildEnvironment,
     });
 
     const builtApk = path.join(worktreePath, APK_RELATIVE_PATH);
     if (!fs.existsSync(builtApk) || fs.statSync(builtApk).size <= 0) fail(`未生成 enterprise release APK：${builtApk}`);
+    const lineageApk = `${builtApk}.lineage.apk`;
+    const lineageArguments = [LINEAGE_SIGNER, '--input', builtApk, '--output', lineageApk];
+    if (signingProperties) lineageArguments.push('--properties', signingProperties);
+    process.stdout.write('[forward-rollback] 应用正式签名轮换谱系\n');
+    run(process.execPath, lineageArguments, { cwd: PROJECT_ROOT, env: buildEnvironment });
+    if (!fs.existsSync(lineageApk) || fs.statSync(lineageApk).size <= 0) fail(`未生成签名谱系 APK：${lineageApk}`);
 
     fs.mkdirSync(outputDirectory, { recursive: true });
     const outputName = `hydro-forward-rollback-v${targetVersion.normalized}-from-${sourceCommit.slice(0, 12)}.apk`;
@@ -200,7 +249,7 @@ function main() {
     const outputManifest = path.join(outputDirectory, `${outputName}.json`);
     if (fs.existsSync(outputApk) || fs.existsSync(outputManifest)) fail(`输出文件已存在，拒绝覆盖：${outputApk}`);
 
-    fs.copyFileSync(builtApk, outputApk, fs.constants.COPYFILE_EXCL);
+    fs.copyFileSync(lineageApk, outputApk, fs.constants.COPYFILE_EXCL);
     const digest = sha256(outputApk);
     const manifest = {
       kind: 'hydro-terminal-forward-rollback-build',
@@ -213,6 +262,7 @@ function main() {
       targetVersionCode: targetVersion.code,
       flavor: 'enterprise',
       applicationId: 'com.hydro.geekterminal',
+      signing: 'v3-lineage-rotation-min-sdk-28',
       apk: { file: outputName, bytes: fs.statSync(outputApk).size, sha256: digest },
       publishState: 'not-pushed-not-released',
     };

@@ -7,7 +7,9 @@ const { spawnSync } = require('node:child_process');
 const REPOSITORY = 'TaissaFarmiga/SWCY';
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`;
 const ROOT = path.resolve(__dirname, '..');
-const APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/enterprise/release/app-enterprise-release.apk');
+const GRADLE_APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/enterprise/release/app-enterprise-release.apk');
+const APK_PATH = path.join(ROOT, 'android/app/build/outputs/apk/enterprise/release/app-enterprise-release-lineage.apk');
+const LINEAGE_SIGNER = path.join(ROOT, 'scripts/sign-android-lineage.cjs');
 
 function commandName(name) {
   return process.platform === 'win32' ? `${name}.cmd` : name;
@@ -177,12 +179,24 @@ async function main() {
   run(commandName('npx'), ['cap', 'sync', 'android']);
   run(process.platform === 'win32' ? 'gradlew.bat' : './gradlew', ['assembleEnterpriseRelease', '--no-daemon', '--console=plain', '-q'], { cwd: path.join(ROOT, 'android') });
 
+  if (!fs.existsSync(GRADLE_APK_PATH) || fs.statSync(GRADLE_APK_PATH).size <= 0) throw new Error('Android APK 未生成');
+  fs.rmSync(APK_PATH, { force: true });
+  run(process.execPath, [LINEAGE_SIGNER, '--input', GRADLE_APK_PATH, '--output', APK_PATH]);
   if (!fs.existsSync(APK_PATH) || fs.statSync(APK_PATH).size <= 0) throw new Error('Android APK 未生成');
   assertCleanWorktree('构建后');
 
   const commit = git(['rev-parse', 'HEAD'], { capture: true });
   const digest = sha256(APK_PATH);
   const size = fs.statSync(APK_PATH).size;
+  const rollbackPath = process.env.HYDRO_ROLLBACK_APK_PATH?.trim()
+    ? path.resolve(process.env.HYDRO_ROLLBACK_APK_PATH.trim())
+    : null;
+  if (rollbackPath && (!fs.existsSync(rollbackPath) || !fs.statSync(rollbackPath).isFile())) {
+    throw new Error(`回退 APK 不存在：${rollbackPath}`);
+  }
+  const rollbackSize = rollbackPath ? fs.statSync(rollbackPath).size : 0;
+  const rollbackDigest = rollbackPath ? sha256(rollbackPath) : '';
+  const rollbackName = rollbackPath ? path.basename(rollbackPath) : '';
 
   console.log(`[release] 推送源码 ${commit.slice(0, 12)} 到 GitHub main`);
   git(['push', 'origin', 'HEAD:main'], { env: gitEnv });
@@ -197,8 +211,8 @@ async function main() {
   if (process.platform === 'win32') {
     try {
       const releaseName = `水文测验终端 ${tag}`;
-      const releaseNotes = `## 更新内容\n\n- 水准测量完整闭环与成果导出\n- 流量偏离率、电子气泡工具\n- 首页版本更新中心与移动端交互优化\n- GitHub 单一可信更新通道\n\nAPK SHA-256: ${digest}`;
-      const output = run('powershell.exe', [
+      const releaseNotes = `## 更新内容\n\n- 测量与测流页面采用紧凑移动端布局和统一按钮体系\n- 往返测、间视读数、流速输入、电子气泡、GPS 与震动交互修复\n- 正式签名轮换：兼容已安装 v1.10.26，并迁移至正式证书\n- 提供前向回退包：逻辑回退到上一版本，Android 版本号为 1.10.29\n\nupdate.apk SHA-256: ${digest}${rollbackPath ? `\n${rollbackName} SHA-256: ${rollbackDigest}` : ''}`;
+      const publisherArguments = [
         '-NoProfile',
         '-NonInteractive',
         '-ExecutionPolicy',
@@ -221,7 +235,15 @@ async function main() {
         Buffer.from(releaseName, 'utf8').toString('base64'),
         '-ReleaseNotesBase64',
         Buffer.from(releaseNotes, 'utf8').toString('base64'),
-      ], {
+      ];
+      if (rollbackPath) {
+        publisherArguments.push(
+          '-RollbackApkPath', rollbackPath,
+          '-RollbackApkSize', String(rollbackSize),
+          '-RollbackDigest', rollbackDigest,
+        );
+      }
+      const output = run('powershell.exe', publisherArguments, {
         capture: true,
         env: { ...process.env, GITHUB_TOKEN: token },
       });
@@ -244,7 +266,7 @@ async function main() {
         tag_name: tag,
         target_commitish: commit,
         name: `水文测验终端 ${tag}`,
-        body: `## 更新内容\n\n- 水准测量完整闭环与成果导出\n- 流量偏离率、电子气泡工具\n- 首页版本更新中心与移动端交互优化\n- GitHub 单一可信更新通道\n\nAPK SHA-256: \`${digest}\``,
+        body: `## 更新内容\n\n- 测量与测流页面采用紧凑移动端布局和统一按钮体系\n- 往返测、间视读数、流速输入、电子气泡、GPS 与震动交互修复\n- 正式签名轮换：兼容已安装 v1.10.26，并迁移至正式证书\n- 提供前向回退包：逻辑回退到上一版本，Android 版本号为 1.10.29\n\nupdate.apk SHA-256: \`${digest}\`${rollbackPath ? `\n${rollbackName} SHA-256: \`${rollbackDigest}\`` : ''}`,
         draft: true,
         prerelease: false,
         generate_release_notes: true,
@@ -266,11 +288,34 @@ async function main() {
     if (uploadResponse.statusCode < 200 || uploadResponse.statusCode >= 300) {
       throw new Error(`APK 上传失败（HTTP ${uploadResponse.statusCode}）：${uploadResponse.text}`);
     }
+    if (rollbackPath) {
+      const rollbackUpload = await httpsRequest(`${release.upload_url.split('{')[0]}?name=${encodeURIComponent(rollbackName)}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/vnd.android.package-archive',
+          'User-Agent': 'HydroTerminal-Release',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: fs.readFileSync(rollbackPath),
+        timeoutMs: 300_000,
+      });
+      if (rollbackUpload.statusCode < 200 || rollbackUpload.statusCode >= 300) {
+        throw new Error(`回退 APK 上传失败（HTTP ${rollbackUpload.statusCode}）：${rollbackUpload.text}`);
+      }
+    }
 
     const draft = await githubRequest(token, `/releases/${release.id}`);
     const draftAsset = draft.assets.find((item) => item.name === 'update.apk' && item.state === 'uploaded');
     if (!draftAsset || draftAsset.size !== size || draftAsset.digest !== `sha256:${digest}`) {
       throw new Error('GitHub Draft Release 回读校验失败：APK 大小或 SHA-256 不一致');
+    }
+    if (rollbackPath) {
+      const rollbackAsset = draft.assets.find((item) => item.name === rollbackName && item.state === 'uploaded');
+      if (!rollbackAsset || rollbackAsset.size !== rollbackSize || rollbackAsset.digest !== `sha256:${rollbackDigest}`) {
+        throw new Error('GitHub Draft Release 回退 APK 校验失败');
+      }
     }
 
     await githubRequest(token, `/releases/${release.id}`, {
@@ -290,6 +335,12 @@ async function main() {
   const published = await githubRequest(token, `/releases/tags/${tag}`);
   const asset = published.assets.find((item) => item.name === 'update.apk' && item.state === 'uploaded');
   if (!asset || asset.size !== size || asset.digest !== `sha256:${digest}`) throw new Error('已发布 Release 回读失败');
+  if (rollbackPath) {
+    const rollbackAsset = published.assets.find((item) => item.name === rollbackName && item.state === 'uploaded');
+    if (!rollbackAsset || rollbackAsset.size !== rollbackSize || rollbackAsset.digest !== `sha256:${rollbackDigest}`) {
+      throw new Error('已发布回退 APK 回读失败');
+    }
+  }
 
   console.log(JSON.stringify({
     version,
@@ -298,6 +349,7 @@ async function main() {
     releaseUrl: published.html_url,
     apkSize: size,
     sha256: digest,
+    rollback: rollbackPath ? { name: rollbackName, size: rollbackSize, sha256: rollbackDigest } : null,
   }, null, 2));
 }
 
