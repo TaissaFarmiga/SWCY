@@ -8,9 +8,7 @@ import FlowApp from './components/FlowApp';
 import { LevelingApp } from './components/leveling/LevelingApp';
 import { FlowDeviationTool } from './components/tools/FlowDeviationTool';
 import { SpiritLevel } from './components/tools/SpiritLevel';
-import { GovernanceCenter } from './components/GovernanceCenter';
 import { AppInfo } from './components/AppInfo';
-import { useGovernanceStore } from './store/governanceStore';
 import { useUiStore } from './store/uiStore';
 import type { AppRoute } from './types/navigation';
 import { useZeroJitter } from './hooks/useZeroJitter';
@@ -27,22 +25,7 @@ export default function App() {
   }, [darkMode]);
 
   useEffect(() => {
-    const recordJavaScriptError = () => useGovernanceStore.getState().recordDiagnostic('javascript');
-    const recordPromiseError = () => useGovernanceStore.getState().recordDiagnostic('promise');
-    window.addEventListener('error', recordJavaScriptError);
-    window.addEventListener('unhandledrejection', recordPromiseError);
-    return () => {
-      window.removeEventListener('error', recordJavaScriptError);
-      window.removeEventListener('unhandledrejection', recordPromiseError);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-
-    // One global status-bar policy. Flow and leveling pages must not change
-    // WebView overlay behavior independently because that moves every route.
-    StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
 
     const syncStatusBarStyle = () => {
       const style = document.documentElement.classList.contains('dark')
@@ -139,16 +122,6 @@ export default function App() {
           >
             {/* 仅在激活时挂载，彻底阻断后台传感器耗电 */}
             {route.type === 'spirit-level' && <SpiritLevel onBack={() => setRoute({ type: 'home' })} />}
-          </motion.div>
-
-          <motion.div
-            id="scroll-governance"
-            aria-hidden={route.type !== 'governance'}
-            animate={{ opacity: route.type === 'governance' ? 1 : 0 }}
-            transition={{ duration: 0.25 }}
-            className={`absolute inset-0 overflow-y-auto overflow-x-hidden ${route.type === 'governance' ? 'visible pointer-events-auto' : 'invisible pointer-events-none'}`}
-          >
-            {route.type === 'governance' && <GovernanceCenter onBack={() => setRoute({ type: 'home' })} />}
           </motion.div>
 
           <motion.div

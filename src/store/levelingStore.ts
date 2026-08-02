@@ -16,7 +16,7 @@ import { createEmptyRouteCalculation, recalculateLevelingRoute } from '../lib/Ro
 import { hasValidCoordinates } from '../lib/levelingVisuals';
 import { createPlatformStateStorage } from '../lib/persistence';
 import { DEFAULT_LEVELING_RULE_PROFILE, createRuleProfileSnapshot, normalizeRuleProfileSnapshot } from '../lib/levelingRules';
-import { normalizeInstrumentSnapshot, useGovernanceStore } from './governanceStore';
+import { normalizeInstrumentSnapshot } from '../lib/instrumentSnapshot';
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -345,10 +345,9 @@ function deepCloneRoute(route: LevelingRoute): LevelingRoute {
   return JSON.parse(JSON.stringify(route)) as LevelingRoute;
 }
 
-function applySelectedLevelingInstrument(route: LevelingRoute): LevelingRoute {
-  const governance = useGovernanceStore.getState();
-  const instrumentProfileId = governance.selectedLevelingInstrumentId;
-  const instrumentSnapshot = governance.captureInstrument(instrumentProfileId);
+function preserveLevelingInstrumentSnapshot(route: LevelingRoute): LevelingRoute {
+  const instrumentSnapshot = normalizeInstrumentSnapshot(route.instrumentSnapshot);
+  const instrumentProfileId = instrumentSnapshot?.id ?? route.instrumentProfileId ?? 'unregistered-level';
   return {
     ...route,
     instrumentProfileId,
@@ -358,7 +357,7 @@ function applySelectedLevelingInstrument(route: LevelingRoute): LevelingRoute {
 }
 
 function createConfiguredRoute(grade: LevelingGrade): LevelingRoute {
-  return applySelectedLevelingInstrument(createEmptyLevelingRoute(grade));
+  return preserveLevelingInstrumentSnapshot(createEmptyLevelingRoute(grade));
 }
 
 function prepareEditableRoute(route: LevelingRoute): LevelingRoute {
@@ -372,9 +371,6 @@ function prepareEditableRoute(route: LevelingRoute): LevelingRoute {
     completedAt: undefined,
     updatedAt: new Date().toISOString(),
   };
-  useGovernanceStore.getState().recordAudit({
-    module: 'leveling', recordId: route.id, action: 'revise', before: route, after: revised,
-  });
   return revised;
 }
 
@@ -416,9 +412,8 @@ export interface LevelingState {
   addKnownPoint: (insertAfterId?: string) => void;
   updateKnownPoint: (id: string, field: keyof KnownPoint, value: string | number | null) => void;
   removeKnownPoint: (id: string) => void;
-  /** All UI entry points call this one method; current route direction controls appended stations. */
-  addStation: (insertAfterId?: string, location?: NewStationLocation) => void;
-  beginReturnLeg: () => void;
+  /** Footer creation passes an explicit direction; historical insertion may inherit its surrounding leg. */
+  addStation: (insertAfterId?: string, location?: NewStationLocation, direction?: SurveyDirection) => void;
   setStationDirection: (stationId: string, direction: SurveyDirection) => void;
   updateStationReading: (stationId: string, updates: Partial<LevelingReadings>) => void;
   deleteStation: (stationId: string) => void;
@@ -427,7 +422,6 @@ export interface LevelingState {
   removeIntermediate: (stationId: string, intermediateId: string) => void;
   commitRoute: (mode: 'overwrite' | 'new') => void;
   completeRoute: () => void;
-  applySelectedInstrument: () => void;
   transitionRouteStatus: (status: 'pending_review' | 'reviewed' | 'archived') => void;
   loadRoute: (routeId: string) => void;
   exportCurrentRouteJSON: () => void;
@@ -509,29 +503,11 @@ export const useLevelingStore = create<LevelingState>()(
           isDirty: true,
         };
       }),
-      beginReturnLeg: () => set((state) => {
-        const editable = prepareEditableRoute(state.currentRoute);
-        const lastForward = [...editable.stations].reverse().find((station) => station.direction === 'forward');
-        if (!lastForward) return state;
-        const now = new Date().toISOString();
-        return {
-          currentRoute: recalculateLevelingRoute({
-            ...editable,
-            routeType: 'round-trip',
-            direction: 'return',
-            returnStartStationId: editable.returnStartStationId ?? lastForward.id,
-            returnStartedAt: editable.returnStartedAt ?? now,
-            updatedAt: now,
-          }),
-          isDirty: true,
-        };
-      }),
-      addStation: (insertAfterId, location) => set((state) => {
+      addStation: (insertAfterId, location, requestedDirection) => set((state) => {
         const editable = prepareEditableRoute(state.currentRoute);
         const stations = [...editable.stations];
         const insertIndex = insertAfterId ? stations.findIndex((item) => item.id === insertAfterId) : -1;
-        // Historical insertion inherits its surrounding leg. Footer creation appends using current leg.
-        const direction = insertIndex >= 0 ? stations[insertIndex].direction : editable.direction;
+        const direction = requestedDirection ?? (insertIndex >= 0 ? stations[insertIndex].direction : editable.direction);
         const station = createEmptyLevelingStation(0, direction, location);
         if (insertIndex >= 0) {
           station.readings.backPoint = stations[insertIndex].readings.forePoint;
@@ -541,18 +517,36 @@ export const useLevelingStore = create<LevelingState>()(
           stations.push(station);
         }
         const ordered = stations.map((item, index) => ({ ...item, stationNumber: index + 1 }));
+        const firstReturn = ordered.find((item) => item.direction === 'return');
+        const now = new Date().toISOString();
         return {
-          currentRoute: recalculateLevelingRoute({ ...editable, stations: ordered }),
+          currentRoute: recalculateLevelingRoute({
+            ...editable,
+            stations: ordered,
+            direction,
+            routeType: firstReturn ? 'round-trip' : editable.routeType,
+            returnStartStationId: deriveReturnStartStationId(ordered),
+            returnStartedAt: firstReturn ? editable.returnStartedAt ?? now : undefined,
+            updatedAt: now,
+          }),
           isDirty: true,
           lastAddedStationId: station.id,
         };
       }),
       setStationDirection: (stationId, direction) => set((state) => {
         const editable = prepareEditableRoute(state.currentRoute);
+        const stations = editable.stations.map((station) => station.id === stationId ? { ...station, direction } : station);
+        const firstReturn = stations.find((station) => station.direction === 'return');
+        const now = new Date().toISOString();
         return {
           currentRoute: recalculateLevelingRoute({
             ...editable,
-            stations: editable.stations.map((station) => station.id === stationId ? { ...station, direction } : station),
+            stations,
+            direction: stations[stations.length - 1]?.direction ?? 'forward',
+            routeType: firstReturn ? 'round-trip' : editable.routeType,
+            returnStartStationId: deriveReturnStartStationId(stations),
+            returnStartedAt: firstReturn ? editable.returnStartedAt ?? now : undefined,
+            updatedAt: now,
           }),
           isDirty: true,
         };
@@ -578,9 +572,9 @@ export const useLevelingStore = create<LevelingState>()(
           currentRoute: recalculateLevelingRoute({
             ...editable,
             stations,
-            returnStartStationId: editable.returnStartStationId === stationId
-              ? deriveReturnStartStationId(stations)
-              : editable.returnStartStationId,
+            direction: stations[stations.length - 1]?.direction ?? 'forward',
+            returnStartStationId: deriveReturnStartStationId(stations),
+            returnStartedAt: stations.some((station) => station.direction === 'return') ? editable.returnStartedAt : undefined,
           }),
           isDirty: true,
         };
@@ -668,16 +662,13 @@ export const useLevelingStore = create<LevelingState>()(
       completeRoute: () => set((state) => {
         if (!state.currentRoute.calculation.isComplete) return state;
         const now = new Date().toISOString();
-        const completed = recalculateLevelingRoute(applySelectedLevelingInstrument({
+        const completed = recalculateLevelingRoute(preserveLevelingInstrumentSnapshot({
             ...state.currentRoute,
             completionStatus: 'completed',
             completedAt: now,
             endTime: state.currentRoute.endTime ?? now,
             updatedAt: now,
           }));
-        useGovernanceStore.getState().recordAudit({
-          module: 'leveling', recordId: completed.id, action: 'complete', reason: '完成水准成果', before: state.currentRoute, after: completed,
-        });
         const snapshot = deepCloneRoute(completed);
         return {
           currentRoute: deepCloneRoute(snapshot),
@@ -687,20 +678,10 @@ export const useLevelingStore = create<LevelingState>()(
           isDirty: false,
         };
       }),
-      applySelectedInstrument: () => set((state) => {
-        const editable = prepareEditableRoute(state.currentRoute);
-        return {
-          currentRoute: recalculateLevelingRoute(applySelectedLevelingInstrument(editable)),
-          isDirty: true,
-        };
-      }),
       transitionRouteStatus: (status) => set((state) => {
         if (state.currentRoute.completionStatus === 'draft' || state.currentRoute.completionStatus === 'revision') return state;
         const before = state.currentRoute;
         const after = recalculateLevelingRoute({ ...before, completionStatus: status, updatedAt: new Date().toISOString() });
-        useGovernanceStore.getState().recordAudit({
-          module: 'leveling', recordId: before.id, action: status === 'archived' ? 'archive' : 'review', before, after,
-        });
         const snapshot = deepCloneRoute(after);
         return {
           currentRoute: deepCloneRoute(snapshot),
@@ -754,10 +735,7 @@ export const useLevelingStore = create<LevelingState>()(
       migrate: (persistedState) => migrateLevelingPersistedState(persistedState),
       partialize: (state) => ({ currentRoute: state.currentRoute, routes: state.routes, isDirty: state.isDirty }),
       onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          console.error('[levelingStore] 持久化数据恢复失败', error);
-          useGovernanceStore.getState().recordDiagnostic('persistence');
-        }
+        if (error) console.error('[levelingStore] 持久化数据恢复失败', error);
         state?.setHasHydrated(true);
       },
     },

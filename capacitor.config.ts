@@ -6,13 +6,12 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     StatusBar: {
-      // Android 16 forces edge-to-edge. Native WindowInsets keep controls safe.
-      // This setting preserves the same layout model on older Android versions.
+      // MainActivity owns system-bar insets for every route.
       overlaysWebView: true,
       style: 'LIGHT'
     },
     Keyboard: {
-      resize: 'body'
+      resize: 'native'
     }
   }
 };

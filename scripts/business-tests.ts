@@ -4,7 +4,7 @@ import ExcelJS from 'exceljs';
 import { calculateFlowDeviation } from '../src/lib/flowDeviation';
 import { createMeasureVertical, createNewRun, processRun } from '../src/lib/HydroEngine';
 import { durationLabel, legacyTimeToIso, markHydroRunTime } from '../src/lib/hydroTiming';
-import { applyDeadZone, boundedBubblePosition, lowPassTilt, rotateForScreen } from '../src/lib/spiritLevel';
+import { applyDeadZone, boundedBubblePosition, lowPassTilt, rotateForScreen, snapTiltWithinTolerance } from '../src/lib/spiritLevel';
 import { greatCircleDistanceMeters, isValidCoordinate } from '../src/lib/levelingVisuals';
 import { formatFiniteAdaptive, roundBanker } from '../src/lib/rounding';
 import { compareVersions, formatAssetSize, normalizeVersion, parseGitHubRelease } from '../src/lib/githubUpdate';
@@ -17,10 +17,7 @@ import {
   useLevelingStore,
 } from '../src/store/levelingStore';
 import { migrateHydroPersistedState, useHydroStore } from '../src/store/hydroStore';
-import { createAppDiagnostic, createFullBackup, restoreFullBackup, validateFullBackup } from '../src/lib/appBackup';
-import { integrityHash } from '../src/lib/dataIntegrity';
 import { createRuleProfileSnapshot, DEFAULT_LEVELING_RULE_PROFILE } from '../src/lib/levelingRules';
-import { migrateGovernanceState, useGovernanceStore } from '../src/store/governanceStore';
 import { runHydroBenchmark, ZHENG_JIA_TUN_FIXTURE } from '../src/lib/__benchmark';
 import { buildHydroWorkbook } from '../src/lib/exportExcel';
 import {
@@ -261,6 +258,8 @@ function testSpiritLevelMath(): void {
   assertClose(filtered.x, 1.8, 1e-12, '低通滤波 X');
   const bounded = boundedBubblePosition(100, 100);
   assert(Math.hypot(bounded.x, bounded.y) <= 92.0000001, '气泡位移必须限制在靶盘内');
+  assert(snapTiltWithinTolerance({ x: 0.6, y: 0.7 }, 1).x === 0, '1° 中心容差内气泡必须吸附中心');
+  assert(snapTiltWithinTolerance({ x: 0.8, y: 0.8 }, 1).x === 0.8, '超出中心容差后气泡必须显示真实方向');
 }
 
 function testLevelingEngine(): void {
@@ -442,26 +441,32 @@ function testReturnLegWorkflow(): void {
   route.stations = [forwardStation];
   useLevelingStore.setState({ currentRoute: route, routes: [], isDirty: false, lastAddedStationId: null });
 
-  useLevelingStore.getState().beginReturnLeg();
-  let state = useLevelingStore.getState();
-  assert(state.currentRoute.routeType === 'round-trip' && state.currentRoute.direction === 'return', '开始返测应切换为往返路线和返测测段');
-  assert(state.currentRoute.returnStartStationId === forwardStation.id && Boolean(state.currentRoute.returnStartedAt), '返测起点和时间应持久化');
-
   useLevelingStore.getState().addStation(undefined, {
     lat: 30.123456,
     lng: 120.654321,
     accuracyM: 6.5,
     capturedAt: '2026-07-30T00:00:00.000Z',
     source: 'native-gps',
-  });
-  state = useLevelingStore.getState();
+  }, 'return');
+  let state = useLevelingStore.getState();
   const returnStation = state.currentRoute.stations[1];
-  assert(returnStation.direction === 'return' && returnStation.readings.backPoint === 'B', '返测后新增测站应自动继承返测方向和前站点名');
+  assert(state.currentRoute.routeType === 'round-trip' && state.currentRoute.direction === 'return', '添加返测站应切换为往返路线和返测测段');
+  assert(state.currentRoute.returnStartStationId === forwardStation.id && Boolean(state.currentRoute.returnStartedAt), '首个返测站应持久化返测起点和时间');
+  assert(returnStation.direction === 'return' && returnStation.readings.backPoint === 'B', '返测按钮应明确创建返测站并继承前站点名');
   assert(returnStation.lat === 30.123456 && returnStation.lng === 120.654321 && returnStation.locationAccuracyM === 6.5 && returnStation.locationSource === 'native-gps', '定位建站应保存坐标、精度和来源');
 
-  useLevelingStore.getState().addStation(forwardStation.id);
+  useLevelingStore.getState().addStation(undefined, undefined, 'forward');
   state = useLevelingStore.getState();
-  assert(state.currentRoute.stations[1].direction === 'forward' && state.currentRoute.stations[2].direction === 'return', '历史插站只能继承所在测段，不得改变返测状态');
+  assert(state.currentRoute.stations[2].direction === 'forward' && state.currentRoute.direction === 'forward', '往测按钮应明确创建往测站，不得被前一返测站覆盖');
+
+  useLevelingStore.getState().setStationDirection(returnStation.id, 'forward');
+  state = useLevelingStore.getState();
+  assert(state.currentRoute.stations.every((station) => station.direction === 'forward'), '测站方向标志应支持点击切换为往测');
+  assert(!state.currentRoute.returnStartStationId && !state.currentRoute.returnStartedAt, '取消全部返测标志后应清除返测元数据');
+
+  useLevelingStore.getState().setStationDirection(forwardStation.id, 'return');
+  state = useLevelingStore.getState();
+  assert(state.currentRoute.stations[0].direction === 'return' && Boolean(state.currentRoute.returnStartedAt), '测站方向标志应支持点击切换为返测');
   useLevelingStore.setState({ currentRoute: createEmptyLevelingRoute('4'), routes: [], isDirty: false, lastAddedStationId: null });
 }
 
@@ -536,39 +541,15 @@ function testMigration(): void {
   assert(Number.isFinite(Date.parse(malformed.currentRoute.createdAt)), '非法旧日期应回退为有效 ISO 时间');
 }
 
-function testGovernanceSnapshotsAndAudit(): void {
+function testRuleSnapshots(): void {
   const customRule = JSON.parse(JSON.stringify(DEFAULT_LEVELING_RULE_PROFILE));
   customRule.id = 'unit-approved-rule';
   customRule.name = '单位确认规则';
   customRule.approved = true;
   customRule.source = '测试中的明确来源';
-  const migrated = migrateGovernanceState({ ruleProfiles: [customRule, { id: 'bad-rule' }], instruments: [] });
-  assert(migrated.ruleProfiles.some((rule) => rule.id === customRule.id && rule.approved), '自定义规则迁移不得被默认规则覆盖');
-  assert(migrated.ruleProfiles.every((rule, index, all) => all.findIndex((candidate) => candidate.id === rule.id) === index), '规则 ID 不得重复');
-
   const snapshot = createRuleProfileSnapshot(customRule, '2026-07-29T00:00:00.000Z');
   customRule.tolerances['3'].maxSightDistance = 999;
   assert(snapshot.tolerances['3'].maxSightDistance !== 999 && snapshot.capturedAt === '2026-07-29T00:00:00.000Z', '规则快照必须深拷贝并固定捕获时间');
-
-  useGovernanceStore.setState({ ...migrateGovernanceState({}), hydrated: true });
-  const instrument = useGovernanceStore.getState().addInstrument({
-    kind: 'current-meter', name: '测试流速仪', model: 'LS-Test', serialNumber: 'SN-1', certificateNumber: 'CERT-1',
-    verificationDate: '1999-01-01', validUntil: '2000-01-01', status: 'valid', meterFormula: { k: 0.5, c: 0.01 }, notes: '',
-  });
-  useGovernanceStore.getState().setSelectedInstrument('flow', instrument.id);
-  const instrumentSnapshot = useGovernanceStore.getState().captureInstrument(instrument.id);
-  assert(instrumentSnapshot?.status === 'expired' && instrumentSnapshot.meterFormula?.k === 0.5, '仪器快照应自动识别过期并保留流速公式');
-  useGovernanceStore.getState().updateInstrument(instrument.id, { name: '修改后名称', meterFormula: { k: 1, c: 1 } });
-  assert(instrumentSnapshot?.name === '测试流速仪' && instrumentSnapshot.meterFormula?.k === 0.5, '仪器档案修改不得串改任务快照');
-
-  const before = { nested: { value: 1 } };
-  const after = { nested: { value: 2 } };
-  const entry = useGovernanceStore.getState().recordAudit({ module: 'governance', recordId: 'audit-test', action: 'revise', before, after });
-  const beforeHash = entry.beforeHash;
-  before.nested.value = 99;
-  after.nested.value = 100;
-  assert(entry.beforeHash === beforeHash && entry.beforeHash === integrityHash({ nested: { value: 1 } }), '审计摘要不得受调用方后续突变影响');
-  assert(!('before' in entry) && !('after' in entry), '审计记录不得保存整份测量数据');
 }
 
 function buildCompleteHydroRun() {
@@ -613,37 +594,6 @@ function testLockedResultsCreateRevisions(): void {
   useLevelingStore.getState().commitRoute('overwrite');
   levelingState = useLevelingStore.getState();
   assert(levelingState.routes.length === 2 && levelingState.routes.some((item) => item.id === completedRoute.id && item.completionStatus === 'completed') && levelingState.routes.some((item) => item.id === routeRevisionId && item.parentId === completedRoute.id), '保存水准修订必须保留原成果和父子关系');
-}
-
-async function testFullBackupAndDiagnostics(): Promise<void> {
-  useHydroStore.setState((state) => ({ currentRun: { ...state.currentRun, notes: '不得出现在诊断中的测流秘密' } }));
-  useLevelingStore.setState((state) => ({ currentRoute: { ...state.currentRoute, notes: '不得出现在诊断中的水准秘密' } }));
-  const backup = createFullBackup('2026-07-29T12:34:56.000Z');
-  const validated = validateFullBackup(backup);
-  assert(validated.payload.hydro.templates.length === useHydroStore.getState().templates.length, '完整备份应包含断面模板');
-  assert(validated.payload.governance.ruleProfiles.length === useGovernanceStore.getState().ruleProfiles.length, '完整备份应包含规则和治理数据');
-
-  const tampered = JSON.parse(JSON.stringify(backup));
-  tampered.payload.hydro.currentRun.location = '被篡改';
-  let rejectedTampered = false;
-  try { validateFullBackup(tampered); } catch { rejectedTampered = true; }
-  assert(rejectedTampered, '完整备份内容被修改后必须拒绝');
-
-  const originalFlowId = validated.payload.hydro.currentRun.id;
-  const originalLevelingId = validated.payload.leveling.currentRoute.id;
-  useHydroStore.setState((state) => ({ currentRun: { ...state.currentRun, id: 'temporary-flow-id' }, runs: [] }));
-  useLevelingStore.setState((state) => ({ currentRoute: { ...state.currentRoute, id: 'temporary-leveling-id' }, routes: [] }));
-  restoreFullBackup(validated);
-  assert(useHydroStore.getState().currentRun.id === originalFlowId && useLevelingStore.getState().currentRoute.id === originalLevelingId, '完整备份恢复应同时恢复测流和水准工作区');
-
-  const flowBeforeInvalidRestore = useHydroStore.getState().currentRun.id;
-  try { restoreFullBackup(tampered); } catch { /* 预期拒绝 */ }
-  assert(useHydroStore.getState().currentRun.id === flowBeforeInvalidRestore, '非法备份不得污染当前数据');
-
-  const diagnostic = await createAppDiagnostic();
-  const diagnosticText = JSON.stringify(diagnostic);
-  assert(!diagnosticText.includes('不得出现在诊断') && !diagnosticText.includes('verticals') && !diagnosticText.includes('stations'), '诊断文件不得包含完整测量数据或备注');
-  assert(diagnostic.appVersion.length > 0 && diagnostic.counts.flowRecords >= 0 && diagnostic.counts.levelingRecords >= 0, '诊断应包含版本、水合和记录数量');
 }
 
 function testConfiguredBusinessFixture(): void {
@@ -748,9 +698,8 @@ testLevelingVisualData();
 testLevelingStoreHistory();
 testReturnLegWorkflow();
 testMigration();
-testGovernanceSnapshotsAndAudit();
+testRuleSnapshots();
 testLockedResultsCreateRevisions();
-await testFullBackupAndDiagnostics();
 testConfiguredBusinessFixture();
 await testExcel();
 

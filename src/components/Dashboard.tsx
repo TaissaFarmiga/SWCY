@@ -7,7 +7,7 @@
  * 3. 按钮全部挂载 Zustand store actions，与 HydroTable 面板联动。
  */
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Plus, Play, Square } from 'lucide-react';
+import { ChevronDown, History, Plus, Play, Square } from 'lucide-react';
 import { useState } from 'react';
 import { useHydroStore } from '../store/hydroStore';
 import SaveHub from './SaveHub';
@@ -15,19 +15,16 @@ import SaveHub from './SaveHub';
 // Liquid Glass 风格微缩数据块 (统一宽度)
 function StatPill({ label, value, unit }: { label: string; value?: string; unit: string }) {
   return (
-    <div className="flex w-full items-center justify-between rounded-xl border border-white/80 bg-white/60 px-2 py-1 shadow-glass backdrop-blur-md dark:border-gray-700/60 dark:bg-gray-800/60">
-      {/* 1. 左侧标签：固定宽度，严格靠左对齐 */}
-      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium w-12 text-left shrink-0">
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1 rounded-xl border border-white/80 bg-white/60 px-2 py-1 shadow-glass backdrop-blur-md dark:border-gray-700/60 dark:bg-gray-800/60">
+      <span className="truncate text-left text-[10px] font-medium text-slate-500 dark:text-slate-400">
         {label}
       </span>
-      {/* 2. 中间数字骨架：整体居中，内部靠左 */}
-      <div className="flex-1 flex justify-center min-w-0">
-        <div className="w-16 text-left font-mono text-sm font-black text-blue-600 dark:text-cyan-400">
+      <div className="min-w-0 text-center">
+        <div className="truncate font-mono text-sm font-black tabular-nums text-blue-600 dark:text-cyan-400">
           {value || '--'}
         </div>
       </div>
-      {/* 3. 右侧单位：固定宽度，严格靠右对齐 */}
-      <span className="text-[10px] text-slate-400 dark:text-slate-500 w-10 text-right shrink-0 whitespace-nowrap">
+      <span className="shrink-0 whitespace-nowrap text-right text-[9px] text-slate-400 dark:text-slate-500">
         {unit}
       </span>
     </div>
@@ -66,6 +63,8 @@ export default function Dashboard() {
   const currentRun = useHydroStore((s) => s.currentRun);
   const createRun = useHydroStore((s) => s.createRun);
   const markTime = useHydroStore((s) => s.markTime);
+  const toggleHistoryPanel = useHydroStore((s) => s.toggleHistoryPanel);
+  const historyCount = useHydroStore((s) => s.runs.length);
   const [expanded, setExpanded] = useState(false);
 
   // 格式化时间显示 (HH:mm) — 兼容 ISO 与 MM/DD HH:mm 两种格式
@@ -100,15 +99,16 @@ export default function Dashboard() {
   return (
     <div className="relative z-10 space-y-1 bg-gradient-to-b from-[#F2F2F7]/80 to-transparent px-2 py-1 backdrop-blur-sm dark:from-gray-950/80">
       {/* 第一行：核心数据 + 展开按钮 */}
-      <div className="relative pr-10">
-        <div className="grid grid-cols-2 gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-1">
+        <div className="contents">
           {primaryStats.map((s) => (
             <StatPill key={s.label} {...s} />
           ))}
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="glass-icon-button absolute right-0 top-1/2 -translate-y-1/2"
+          className="glass-icon-button !min-h-9 !min-w-9"
+          aria-label={expanded ? '收起汇总数据' : '展开更多数据'}
           title={expanded ? '收起' : '展开更多数据'}
         >
           <ChevronDown
@@ -126,7 +126,7 @@ export default function Dashboard() {
             transition={{ duration: 0.15 }}
             className="overflow-hidden"
           >
-            <div className="pr-10">
+            <div>
               <div className="grid grid-cols-2 gap-1 pb-1">
                 {secondaryStats.map((s) => (
                   <StatPill key={s.label} {...s} />
@@ -138,9 +138,9 @@ export default function Dashboard() {
       </AnimatePresence>
 
      {/* 第二行：全站唯一操作栏 [+][历史] | [▶ 开始][⏹ 结束] */}
-      <div className="flex items-center gap-1.5 w-full">
+      <div className="flex w-full min-w-0 items-center gap-1.5">
         {/* 左侧可滑动区域（如果屏幕极窄） */}
-        <div className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-1">
           {/* 新建 */}
           <GlassButton onClick={() => createRun()} highlight className="px-2.5" title="新建测次">
             <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -169,6 +169,11 @@ export default function Dashboard() {
             <span className="text-[11px] font-mono font-bold text-red-600 dark:text-red-300">
               {formatTime(currentRun.endTime)}
             </span>
+          </GlassButton>
+
+          <GlassButton onClick={toggleHistoryPanel} className="min-w-[50px]" title="历史记录">
+            <History className="h-3.5 w-3.5" />
+            <span className="font-mono text-[11px] font-bold">{historyCount}</span>
           </GlassButton>
         </div>
 

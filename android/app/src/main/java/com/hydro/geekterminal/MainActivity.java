@@ -35,8 +35,8 @@ public class MainActivity extends BridgeActivity {
     /**
      * Android 16 enforces edge-to-edge for targetSdk 36. Keep the WebView background
      * immersive while moving interactive web content below status bars and display
-     * cutouts. The handled top/side insets are consumed so CSS safe-area values do
-     * not add the same space a second time.
+     * cutouts. The handled system-bar insets are consumed so CSS safe-area values
+     * do not add the same space a second time.
      */
     private void installSystemBarInsets() {
         WebView webView = this.bridge.getWebView();
@@ -48,21 +48,24 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
             Insets statusBars = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars());
             Insets displayCutout = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            Insets navigationBars = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars());
 
-            int safeLeft = Math.max(statusBars.left, displayCutout.left);
+            int safeLeft = Math.max(Math.max(statusBars.left, displayCutout.left), navigationBars.left);
             int safeTop = Math.max(statusBars.top, displayCutout.top);
-            int safeRight = Math.max(statusBars.right, displayCutout.right);
+            int safeRight = Math.max(Math.max(statusBars.right, displayCutout.right), navigationBars.right);
+            int safeBottom = Math.max(displayCutout.bottom, navigationBars.bottom);
 
             view.setPadding(
                 initialLeft + safeLeft,
                 initialTop + safeTop,
                 initialRight + safeRight,
-                initialBottom
+                initialBottom + safeBottom
             );
 
             return new WindowInsetsCompat.Builder(windowInsets)
                 .setInsets(WindowInsetsCompat.Type.statusBars(), Insets.NONE)
                 .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.NONE)
+                .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.NONE)
                 .build();
         });
         ViewCompat.requestApplyInsets(webView);

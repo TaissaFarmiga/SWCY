@@ -1,0 +1,43 @@
+﻿{
+    "schemaVersion":  1,
+    "appVersion":  "1.10.29",
+    "requestedRounds":  1,
+    "mode":  "all",
+    "startedAt":  "2026-08-02T06:13:09.3101022Z",
+    "completedAt":  "2026-08-02T06:18:06.0909735Z",
+    "status":  "passed",
+    "rounds":  [
+                   {
+                       "round":  1,
+                       "status":  "passed",
+                       "startedAt":  "2026-08-02T06:13:09.3537890Z",
+                       "completedAt":  "2026-08-02T06:18:06.0382807Z",
+                       "durationSeconds":  296.7,
+                       "tests":  5,
+                       "failures":  0,
+                       "errors":  0,
+                       "skipped":  0,
+                       "junit":  [
+                                     {
+                                         "file":  ".\\verification\\mobile-ux-v1.10.29\\android-final\\round-01\\junit-01.xml",
+                                         "sha256":  "a2801a826d21fb016f75c1a7618b340a7fa0ed4941245b858bf404ea886f539a"
+                                     }
+                                 ],
+                       "screenshots":  [
+                                           {
+                                               "file":  "01-home.png",
+                                               "sha256":  "9c2adae5ca744423b70e65f461085909c7e17c70ad54a499f83b12cc64bf44ee"
+                                           },
+                                           {
+                                               "file":  "02-flow.png",
+                                               "sha256":  "f3c8d6292cd19f861cd8050c14ff7021d6efd61c6e39c2f0f4f73a647e2c39ae"
+                                           },
+                                           {
+                                               "file":  "03-leveling.png",
+                                               "sha256":  "0eae561f4bb16104cc367e88990e2ffb2272c1127c0bb3a4717983eacdf9ba65"
+                                           }
+                                       ]
+                   }
+               ],
+    "completedRounds":  1
+}

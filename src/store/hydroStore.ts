@@ -21,7 +21,7 @@ import { DEFAULT_METER_FORMULA, DEFAULT_SHORE_COEFFICIENT } from '../types';
 import { downloadExcel } from '../lib/exportExcel';
 import { markHydroRunTime, normalizeRunTimestamps } from '../lib/hydroTiming';
 import { createPlatformStateStorage } from '../lib/persistence';
-import { normalizeInstrumentSnapshot, useGovernanceStore } from './governanceStore';
+import { normalizeInstrumentSnapshot } from '../lib/instrumentSnapshot';
 import type { RecordLifecycleStatus } from '../types/governance';
 
 const STORAGE_KEY = 'hydrology-data';
@@ -94,7 +94,6 @@ interface HydroState {
   exportCurrentRunJSON: () => void;
   getProcessedRun: () => Run;
   markTime: (type: 'start' | 'end') => void;
-  applySelectedInstrument: () => void;
   completeCurrentRun: () => boolean;
   transitionRecordStatus: (status: 'pending_review' | 'reviewed' | 'archived') => void;
   importBackup: (backupData: unknown) => void;
@@ -279,10 +278,9 @@ function recordStatus(value: unknown): RecordLifecycleStatus {
     || value === 'archived' || value === 'revision' ? value : 'draft';
 }
 
-function applySelectedFlowInstrument(run: Run): Run {
-  const governance = useGovernanceStore.getState();
-  const instrumentProfileId = governance.selectedFlowInstrumentId;
-  const instrumentSnapshot = governance.captureInstrument(instrumentProfileId);
+function preserveFlowInstrumentSnapshot(run: Run): Run {
+  const instrumentSnapshot = normalizeInstrumentSnapshot(run.instrumentSnapshot);
+  const instrumentProfileId = instrumentSnapshot?.id ?? run.instrumentProfileId ?? 'unregistered-flow-meter';
   const formula = instrumentSnapshot?.meterFormula ?? run.meterFormula ?? DEFAULT_METER_FORMULA;
   return {
     ...run,
@@ -447,7 +445,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     }
     const newLocation = `未知断面${counter}`;
 
-    const newRun: Run = applySelectedFlowInstrument({
+    const newRun: Run = preserveFlowInstrumentSnapshot({
       ...createNewRun(nextNo, fp || s.currentRun.flowPeriod),
       id: crypto.randomUUID(), 
       timestamp: new Date().toISOString(),
@@ -470,7 +468,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     let counter = 1;
     while (s.runs.some(r => r.location === `未知断面${counter}`)) counter++;
     
-    const newRun: Run = applySelectedFlowInstrument({
+    const newRun: Run = preserveFlowInstrumentSnapshot({
       ...createNewRun(maxNo + 1, s.currentRun.flowPeriod),
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
@@ -747,9 +745,6 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
         revision: (original.revision ?? 0) + 1,
         completedAt: undefined,
       });
-      useGovernanceStore.getState().recordAudit({
-        module: 'flow', recordId: original.id, action: 'revise', before: original, after: revised,
-      });
       return { currentRun: revised, isDirty: true };
     }
     const processed = processRun({ ...s.currentRun });
@@ -947,23 +942,15 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     get().recalculate();
   },
 
-  applySelectedInstrument: () => {
-    set((state) => ({ currentRun: applySelectedFlowInstrument(state.currentRun), isDirty: true }));
-    get().recalculate();
-  },
-
   completeCurrentRun: () => {
     const state = get();
     const processed = processRun(state.currentRun);
     if (!processed.totalDischarge || !processed.totalArea) return false;
     const completed: Run = {
-      ...applySelectedFlowInstrument(processed),
+      ...preserveFlowInstrumentSnapshot(processed),
       recordStatus: 'completed',
       completedAt: new Date().toISOString(),
     };
-    useGovernanceStore.getState().recordAudit({
-      module: 'flow', recordId: completed.id, action: 'complete', reason: '完成测流成果', before: state.currentRun, after: completed,
-    });
     set({
       currentRun: completed,
       runs: state.runs.some((run) => run.id === completed.id)
@@ -979,9 +966,6 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
     const before = state.currentRun;
     if (before.recordStatus === 'draft' || before.recordStatus === 'revision') return;
     const after: Run = { ...before, recordStatus: status };
-    useGovernanceStore.getState().recordAudit({
-      module: 'flow', recordId: before.id, action: status === 'archived' ? 'archive' : 'review', before, after,
-    });
     set({
       currentRun: after,
       runs: state.runs.map((run) => run.id === after.id ? JSON.parse(JSON.stringify(after)) as Run : run),
@@ -1154,10 +1138,7 @@ export const useHydroStore = create<HydroState>()(persist((set, get) => ({
   migrate: (state) => migrateHydroPersistedState(state),
   partialize: (s) => ({ currentRun: s.currentRun, runs: s.runs, templates: s.templates }),
   onRehydrateStorage: () => (state, error) => {
-    if (error) {
-      console.error('[hydroStore] 持久化数据恢复失败', error);
-      useGovernanceStore.getState().recordDiagnostic('persistence');
-    }
+    if (error) console.error('[hydroStore] 持久化数据恢复失败', error);
     if (state) {
       void state.migrateLegacyTemplates();
       state.setHasHydrated(true);

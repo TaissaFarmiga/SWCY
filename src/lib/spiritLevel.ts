@@ -31,6 +31,11 @@ export function boundedBubblePosition(x: number, y: number): { x: number; y: num
   return { x: targetX, y: targetY };
 }
 
+export function snapTiltWithinTolerance(tilt: TiltVector, toleranceDegrees: number): TiltVector {
+  if (!Number.isFinite(toleranceDegrees) || toleranceDegrees < 0) return tilt;
+  return Math.hypot(tilt.x, tilt.y) <= toleranceDegrees ? { x: 0, y: 0 } : tilt;
+}
+
 export function lowPassTilt(
   previous: TiltVector | null,
   next: TiltVector,

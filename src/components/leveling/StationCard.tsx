@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Trash2, Gauge, AlertCircle } from 'lucide-react
 import { useLevelingStore } from '../../store/levelingStore';
 import type { LevelingGrade, LevelingStation, LevelingReadings } from '../../types/leveling';
 import { gradeTolerance } from '../../lib/levelingRules';
+import { triggerCenterFeedback } from '../../lib/mobileFeedback';
 
 interface Props {
   station: LevelingStation;
@@ -83,7 +84,7 @@ function ConfirmDeleteButton({ onDelete }: { onDelete: () => void }) {
 }
 
 const StationCardComponent = ({ station, index, grade }: Props) => {
-  const { updateStationReading, deleteStation, addIntermediate, updateIntermediate, removeIntermediate } = useLevelingStore();
+  const { updateStationReading, deleteStation, addIntermediate, updateIntermediate, removeIntermediate, setStationDirection } = useLevelingStore();
   const ruleProfileSnapshot = useLevelingStore((state) => state.currentRoute.ruleProfileSnapshot);
   const [showResults, setShowResults] = useState(false);
 
@@ -115,6 +116,21 @@ const StationCardComponent = ({ station, index, grade }: Props) => {
           <div className="flex items-center justify-center w-5 h-5 rounded-md bg-blue-500 text-white text-[11px] font-bold shadow-sm shadow-blue-500/20">
             {index + 1}
           </div>
+          <button
+            type="button"
+            data-testid="leveling-direction-toggle"
+            aria-label={`当前${station.direction === 'return' ? '返测' : '往测'}，点击切换`}
+            title="点击切换往测或返测"
+            onClick={() => {
+              setStationDirection(station.id, station.direction === 'return' ? 'forward' : 'return');
+              void triggerCenterFeedback();
+            }}
+            className={`flex min-h-8 items-center rounded-full px-2 text-[10px] font-black transition-colors active:scale-95 ${station.direction === 'return'
+              ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/45 dark:text-violet-300'
+              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/45 dark:text-blue-300'}`}
+          >
+            {station.direction === 'return' ? '返测' : '往测'}
+          </button>
           {(hasError || isIncomplete) && <AlertCircle className={`w-3.5 h-3.5 ${hasError ? 'text-red-500' : 'text-amber-500'}`} />}
         </div>
         <div className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">

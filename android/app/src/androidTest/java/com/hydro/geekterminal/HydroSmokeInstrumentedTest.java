@@ -46,10 +46,7 @@ public class HydroSmokeInstrumentedTest {
             waitForRoute(scenario, "flow-screen");
             assertViewportHasNoOverflow(scenario, 320);
             assertCompactHeader(scenario, "flow-app-header");
-            clickTestId("flow-more");
-            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-more-menu']\") !== null", "测流更多菜单未打开");
-            assertViewportHasNoOverflow(scenario, 320);
-            clickTestId("flow-more");
+            assertSingleRowToolbar(scenario, "flow-toolbar", 7);
             clickTestId("flow-add-vertical");
             waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\") !== null", "测流垂线流速输入未渲染");
             setReactInput(scenario, "flow-velocity-input", "12.345678");
@@ -65,11 +62,8 @@ public class HydroSmokeInstrumentedTest {
             waitForRoute(scenario, "leveling-screen");
             assertViewportHasNoOverflow(scenario, 320);
             assertCompactHeader(scenario, "leveling-app-header");
-            clickTestId("leveling-more");
-            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-more-menu']\") !== null", "水准更多菜单未打开");
-            assertViewportHasNoOverflow(scenario, 320);
-            clickTestId("leveling-more");
-            clickTestId("leveling-add-station");
+            assertSingleRowToolbar(scenario, "leveling-toolbar", 8);
+            clickTestId("leveling-add-return-station");
             denyLocationPermissionIfShown(device);
             waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-location-fallback']\") !== null", "GPS 未授权后未提供无定位建站入口");
             clickTestId("leveling-continue-without-location");
@@ -78,8 +72,11 @@ public class HydroSmokeInstrumentedTest {
             clickTestId("leveling-add-intermediate");
             waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-intermediate-readings']\") !== null", "间视读数行未渲染");
             assertLevelingReadingsFit(scenario, true);
-            clickTestId("leveling-start-return");
-            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-return-state']\") !== null", "开始返测后未进入自动返测状态");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-direction-toggle']\").textContent.includes('返测')", "返测按钮未创建返测测站");
+            clickTestId("leveling-direction-toggle");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-direction-toggle']\").textContent.includes('往测')", "测站方向标志未切换为往测");
+            clickTestId("leveling-direction-toggle");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-direction-toggle']\").textContent.includes('返测')", "测站方向标志未切换回返测");
             assertViewportHasNoOverflow(scenario, 320);
             device.pressBack();
             waitForRoute(scenario, "home-screen");
@@ -107,42 +104,24 @@ public class HydroSmokeInstrumentedTest {
             waitForRoute(scenario, "home-screen");
             assertViewportHasNoOverflow(scenario, 320);
 
-            clickTestId("home-governance");
-            waitForRoute(scenario, "governance-screen");
-            String actor = "Android-Smoke-Operator";
-            setReactInput(scenario, "governance-actor", actor);
-            waitForJavascript(
-                scenario,
-                "document.querySelector(\"[data-testid='governance-actor']\").value === '" + actor + "'",
-                "治理人员输入未写入"
-            );
-            evaluateJavascript(
-                scenario,
-                "(() => {window.__smokeActorPersisted=false;const p=window.Capacitor?.Plugins?.Preferences;"
-                    + "if(!p)return false;p.get({key:'hydro-governance'}).then(r=>{window.__smokeActorPersisted=Boolean(r.value&&r.value.includes('" + actor + "'));})"
-                    + ".catch(()=>{window.__smokeActorPersisted=false;});return true;})()"
-            );
-            waitForJavascript(scenario, "window.__smokeActorPersisted === true", "治理人员未写入 Capacitor Preferences");
-
-            scenario.recreate();
+            clickTestId("home-leveling");
+            waitForRoute(scenario, "leveling-screen");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-station-card']\") !== null", "Activity 重建后测站未恢复");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='leveling-direction-toggle']\").textContent.includes('返测')", "Activity 重建后返测标志未恢复");
+            device.pressBack();
             waitForRoute(scenario, "home-screen");
-            clickTestId("home-governance");
-            waitForRoute(scenario, "governance-screen");
-            waitForJavascript(
-                scenario,
-                "document.querySelector(\"[data-testid='governance-actor']\").value === '" + actor + "'",
-                "Activity 重建后治理人员未恢复"
-            );
 
-            clickTestId("backup-export");
+            clickTestId("home-flow");
+            waitForRoute(scenario, "flow-screen");
+            clickTestId("flow-export-json");
             boolean resolverVisible = device.wait(Until.hasObject(By.pkg("com.android.intentresolver")), 8_000);
             String foregroundPackage = device.getCurrentPackageName();
             assertTrue(
-                "完整备份未唤起 Android 分享面板；当前包=" + foregroundPackage,
+                "测流 JSON 导出未唤起 Android 分享面板；当前包=" + foregroundPackage,
                 resolverVisible || (foregroundPackage != null && !TARGET_PACKAGE.equals(foregroundPackage))
             );
             device.pressBack();
-            waitForRoute(scenario, "governance-screen");
+            waitForRoute(scenario, "flow-screen");
         } finally {
             device.executeShellCommand("svc wifi enable");
             device.executeShellCommand("svc data enable");
@@ -200,6 +179,17 @@ public class HydroSmokeInstrumentedTest {
             "(() => {const e=document.querySelector(\"[data-testid='" + testId + "']\");if(!e)return false;const r=e.getBoundingClientRect();"
                 + "return r.height<=80&&r.width<=window.innerWidth&&e.scrollWidth<=e.clientWidth+2&&[...e.querySelectorAll('button')].every(b=>{const x=b.getBoundingClientRect();return x.width>=40&&x.height>=40;});})()",
             "紧凑页头高度、宽度或触控面积不符合移动端要求：" + testId
+        );
+    }
+
+    private static void assertSingleRowToolbar(ActivityScenario<MainActivity> scenario, String testId, int buttonCount) throws Exception {
+        waitForJavascript(
+            scenario,
+            "(() => {const e=document.querySelector(\"[data-testid='" + testId + "']\");if(!e)return false;"
+                + "const buttons=[...e.querySelectorAll('button')];const top=buttons[0]?.getBoundingClientRect().top;"
+                + "return buttons.length===" + buttonCount + "&&buttons.every(b=>Math.abs(b.getBoundingClientRect().top-top)<2)"
+                + "&&!document.querySelector(\"[data-testid$='-more']\");})()",
+            "顶部工具栏不是单排或仍存在二级菜单：" + testId
         );
     }
 

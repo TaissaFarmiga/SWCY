@@ -16,6 +16,7 @@ import {
   medianTilt,
   nextCenteredState,
   rotateForScreen,
+  snapTiltWithinTolerance,
   type TiltVector,
 } from '../../lib/spiritLevel';
 import { triggerCenterFeedback } from '../../lib/mobileFeedback';
@@ -46,13 +47,13 @@ interface SensorCapabilities {
 
 const RENDER_INTERVAL_MS = 50;
 const NO_DATA_TIMEOUT_MS = 3000;
-const CENTER_ENTER_LIMIT_DEGREES = 0.5;
-const CENTER_EXIT_LIMIT_DEGREES = 0.7;
+const CENTER_ENTER_LIMIT_DEGREES = 1;
+const CENTER_EXIT_LIMIT_DEGREES = 1.3;
 const WARNING_LIMIT_DEGREES = 2;
 const DISPLAY_DEAD_ZONE_DEGREES = 0.1;
 const SENSOR_FILTER_ALPHA = 0.16;
-const MEDIAN_SAMPLE_COUNT = 7;
-const CALIBRATION_SAMPLE_WINDOW_MS = 800;
+const MEDIAN_SAMPLE_COUNT = 15;
+const CALIBRATION_SAMPLE_WINDOW_MS = 1400;
 const CENTER_FEEDBACK_COOLDOWN_MS = 900;
 
 function getCapabilities(): SensorCapabilities {
@@ -200,7 +201,8 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         y: applyDeadZone(latest.y - calibrationRef.current.y, DISPLAY_DEAD_ZONE_DEGREES),
         source: latest.source,
       };
-      const bubble = boundedBubblePosition(calibrated.x, calibrated.y);
+      const visualTilt = snapTiltWithinTolerance(calibrated, CENTER_ENTER_LIMIT_DEGREES);
+      const bubble = boundedBubblePosition(visualTilt.x, visualTilt.y);
       bubbleX.set(bubble.x);
       bubbleY.set(bubble.y);
       setReading(calibrated);
@@ -337,7 +339,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
     return (
       <main className="app-safe-screen relative mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center justify-center px-4 pb-28 text-center">
-        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button app-safe-floating-top absolute left-3">
+        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button app-safe-floating-top !absolute left-3">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-white/80 bg-white/65 shadow-lg backdrop-blur-xl dark:border-gray-700 dark:bg-gray-800/60">
@@ -377,11 +379,11 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
 
   return (
     <main className="app-safe-screen mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center overflow-x-hidden px-3 pb-28 min-[360px]:px-4">
-      <header className="relative mb-3 min-h-10 w-full text-center">
-        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button absolute left-0 top-0">
+      <header className="mb-3 flex min-h-10 w-full items-start gap-1">
+        <button type="button" onClick={onBack} aria-label="返回首页" title="返回首页" className="glass-icon-button shrink-0">
           <ChevronLeft className="h-5 w-5" />
         </button>
-        <div className="px-12">
+        <div className="min-w-0 flex-1 pr-10 text-center">
           <p className="text-xs font-semibold tracking-[0.2em] text-amber-500">工具箱</p>
           <h1 className="mt-1 text-xl font-black text-slate-800 dark:text-slate-100">电子气泡</h1>
           <p className="mt-1 text-[11px] text-slate-400">真实传感器 · {reading?.source ?? '等待读数'}</p>
@@ -439,7 +441,7 @@ export function SpiritLevel({ onBack }: { onBack: () => void }) {
         </button>
       </section>
       <p className="mt-4 max-w-[280px] text-center text-[10px] leading-5 text-slate-400">
-        将手机竖直贴紧水准尺后校准。读数采用中值与低通滤波、0.10° 死区；0.50° 入中心、0.70° 出中心。仅作现场辅助，不替代仪器检定。
+        将手机竖直贴紧水准尺后校准。读数采用中值与低通滤波、0.10° 死区；1.00° 入中心、1.30° 出中心，中心容差内气泡自动吸附。仅作现场辅助，不替代仪器检定。
       </p>
     </main>
   );

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Activity, Database, Gauge, HelpCircle, Ruler, Waves } from 'lucide-react';
+import { Activity, Gauge, HelpCircle, Ruler, Waves } from 'lucide-react';
 import type { AppModule } from '../types/navigation';
 import { AppUpdate } from './AppUpdate';
 
@@ -84,22 +84,6 @@ export function Home({ onSelect }: HomeProps) {
             <span className="mt-1 block text-[10px] leading-4 text-slate-500 dark:text-slate-400">水准尺垂直度辅助校验</span>
           </motion.button>
 
-          <motion.button
-            type="button"
-            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onSelect('governance')}
-            data-testid="home-governance"
-            className="col-span-2 min-h-[88px] rounded-3xl border border-white/80 bg-white/65 p-4 text-left shadow-[0_8px_28px_rgba(0,0,0,0.05)] backdrop-blur-xl dark:border-gray-700/80 dark:bg-gray-800/60"
-          >
-            <span className="flex items-center gap-3">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"><Database className="h-5 w-5" /></span>
-              <span className="min-w-0">
-                <strong className="block text-sm text-slate-800 dark:text-slate-100">数据治理与备份</strong>
-                <span className="mt-1 block text-[10px] leading-4 text-slate-500 dark:text-slate-400">仪器档案、规则来源、成果审计与完整备份</span>
-              </span>
-            </span>
-          </motion.button>
         </div>
       </section>
 

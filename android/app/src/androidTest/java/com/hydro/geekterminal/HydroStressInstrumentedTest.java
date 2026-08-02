@@ -55,28 +55,22 @@ public class HydroStressInstrumentedTest {
                 peakPssKb = Math.max(peakPssKb, currentPssKb(scenario));
             }
 
-            clickTestId("home-governance");
-            waitForRoute(scenario, "governance-screen");
-            String finalActor = "Stress-Operator-39";
+            clickTestId("home-flow");
+            waitForRoute(scenario, "flow-screen");
+            clickTestId("flow-add-vertical");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\") !== null", "压力测试流速输入未渲染");
+            String finalVelocity = "39.123456";
             for (int index = 0; index < 40; index++) {
-                setReactInput(scenario, "governance-actor", "Stress-Operator-" + index);
+                setReactInput(scenario, "flow-velocity-input", index + ".123456");
                 SystemClock.sleep(25);
             }
-            waitForJavascript(scenario, "document.querySelector(\"[data-testid='governance-actor']\").value === '" + finalActor + "'", "高频输入最终状态错误");
-            waitForJavascript(
-                scenario,
-                "(() => {const p=window.Capacitor?.Plugins?.Preferences;if(!p)return false;"
-                    + "if(!window.__stressRead){window.__stressRead=true;window.__stressPersisted=false;"
-                    + "p.get({key:'hydro-governance'}).then(r=>{window.__stressPersisted=Boolean(r.value&&r.value.includes('" + finalActor + "'));});}"
-                    + "return window.__stressPersisted===true;})()",
-                "高频输入未持久化"
-            );
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\").value === '" + finalVelocity + "'", "高频流速输入最终状态错误");
 
             scenario.recreate();
             waitForRoute(scenario, "home-screen");
-            clickTestId("home-governance");
-            waitForRoute(scenario, "governance-screen");
-            waitForJavascript(scenario, "document.querySelector(\"[data-testid='governance-actor']\").value === '" + finalActor + "'", "压力重建后持久化状态丢失");
+            clickTestId("home-flow");
+            waitForRoute(scenario, "flow-screen");
+            waitForJavascript(scenario, "document.querySelector(\"[data-testid='flow-velocity-input']\").value === '" + finalVelocity + "'", "压力重建后流速数据丢失");
 
             Runtime.getRuntime().gc();
             SystemClock.sleep(1_500);

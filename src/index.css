@@ -54,6 +54,29 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.app-page-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-page-toolbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.app-page-toolbar > * {
+  flex: 0 0 auto;
+}
+
 /* Allow text selection in inputs */
 input, textarea {
   -webkit-user-select: text;
