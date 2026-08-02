@@ -215,7 +215,7 @@ async function main() {
   if (process.platform === 'win32') {
     try {
       const releaseName = `水文测验终端 ${tag}`;
-      const releaseNotes = `## 更新内容\n\n- 测量与测流页面采用紧凑移动端布局和统一按钮体系\n- 往返测、间视读数、流速输入、电子气泡、GPS 与震动交互修复\n- 正式签名轮换：兼容已安装 v1.10.26，并迁移至正式证书\n- 提供前向回退包：逻辑回退到上一版本，Android 版本号为 1.10.29\n\nupdate.apk SHA-256: ${digest}${rollbackPath ? `\n${rollbackName} SHA-256: ${rollbackDigest}` : ''}`;
+      const releaseNotes = `## 更新内容\n\n- 修复 Android edge-to-edge 页面未避让状态栏和刘海区域\n- 修复软键盘弹出后输入焦点仍被遮挡的问题\n- 统一使用 Capacitor 8 SystemBars 安全区变量，并保留 Web/PWA 回退\n\nupdate.apk SHA-256: ${digest}${rollbackPath ? `\n${rollbackName} SHA-256: ${rollbackDigest}` : ''}`;
       const publisherArguments = [
         '-NoProfile',
         '-NonInteractive',
@@ -270,7 +270,7 @@ async function main() {
         tag_name: tag,
         target_commitish: commit,
         name: `水文测验终端 ${tag}`,
-        body: `## 更新内容\n\n- 测量与测流页面采用紧凑移动端布局和统一按钮体系\n- 往返测、间视读数、流速输入、电子气泡、GPS 与震动交互修复\n- 正式签名轮换：兼容已安装 v1.10.26，并迁移至正式证书\n- 提供前向回退包：逻辑回退到上一版本，Android 版本号为 1.10.29\n\nupdate.apk SHA-256: \`${digest}\`${rollbackPath ? `\n${rollbackName} SHA-256: \`${rollbackDigest}\`` : ''}`,
+        body: `## 更新内容\n\n- 修复 Android edge-to-edge 页面未避让状态栏和刘海区域\n- 修复软键盘弹出后输入焦点仍被遮挡的问题\n- 统一使用 Capacitor 8 SystemBars 安全区变量，并保留 Web/PWA 回退\n\nupdate.apk SHA-256: \`${digest}\`${rollbackPath ? `\n${rollbackName} SHA-256: \`${rollbackDigest}\`` : ''}`,
         draft: true,
         prerelease: false,
         generate_release_notes: true,
