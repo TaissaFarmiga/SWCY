@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { App as CapApp } from '@capacitor/app';
-import { Capacitor } from '@capacitor/core';
-import { StatusBar, Style } from '@capacitor/status-bar';
+import { Capacitor, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { motion } from 'framer-motion';
 import { Home } from './components/Home';
 import FlowApp from './components/FlowApp';
@@ -29,9 +28,9 @@ export default function App() {
 
     const syncStatusBarStyle = () => {
       const style = document.documentElement.classList.contains('dark')
-        ? Style.Dark
-        : Style.Light;
-      StatusBar.setStyle({ style }).catch(() => {});
+        ? SystemBarsStyle.Dark
+        : SystemBarsStyle.Light;
+      SystemBars.setStyle({ style }).catch(() => {});
     };
 
     syncStatusBarStyle();

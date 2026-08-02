@@ -15,6 +15,7 @@ export function useZeroJitter(isActive: boolean, containerId: string = 'viewport
 
     let alignTimeout: ReturnType<typeof setTimeout> | null = null;
     let nativeKeyboardHeight = 0;
+    let unobscuredViewportHeight = window.innerHeight;
     let disposed = false;
     const nativeHandles: Array<{ remove: () => Promise<void> }> = [];
     const visualViewport = window.visualViewport;
@@ -32,9 +33,19 @@ export function useZeroJitter(isActive: boolean, containerId: string = 'viewport
       if (alignTimeout) clearTimeout(alignTimeout);
       alignTimeout = setTimeout(() => {
         if (!isEditable(element) || document.activeElement !== element) return;
+
+        if (nativeKeyboardHeight > 0) {
+          element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+        }
+
         const viewportTop = visualViewport?.offsetTop ?? 0;
         const viewportHeight = visualViewport?.height ?? window.innerHeight;
-        const viewportBottom = viewportTop + viewportHeight;
+        const nativeResize = Math.max(0, unobscuredViewportHeight - window.innerHeight);
+        const nativeOverlay = Math.max(0, nativeKeyboardHeight - nativeResize);
+        const viewportBottom = Math.min(
+          viewportTop + viewportHeight,
+          window.innerHeight - nativeOverlay,
+        );
         const rect = element.getBoundingClientRect();
         const safeTop = viewportTop + 12;
         const safeBottom = viewportBottom - 16;
@@ -73,6 +84,11 @@ export function useZeroJitter(isActive: boolean, containerId: string = 'viewport
         Keyboard.addListener('keyboardDidHide', () => {
           nativeKeyboardHeight = 0;
           applyKeyboardInset(0);
+          window.setTimeout(() => {
+            if (!disposed && nativeKeyboardHeight === 0) {
+              unobscuredViewportHeight = window.innerHeight;
+            }
+          }, 100);
         }),
       ]).then((handles) => {
         if (disposed) {

@@ -5,9 +5,15 @@ const config: CapacitorConfig = {
   appName: '水文测验',
   webDir: 'dist',
   plugins: {
+    SystemBars: {
+      insetsHandling: 'css',
+      style: 'LIGHT',
+      hidden: false
+    },
     StatusBar: {
-      // MainActivity owns system-bar insets for every route.
-      overlaysWebView: true,
+      // Android <= 14 must keep the WebView below the status bar. Android 15+
+      // uses the SystemBars safe-area CSS variables above.
+      overlaysWebView: false,
       style: 'LIGHT'
     },
     Keyboard: {

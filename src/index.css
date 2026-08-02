@@ -2,13 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Unified Web/PWA safe area. Android native consumes system-bar insets after
-   applying them to the WebView, preventing a second CSS offset. */
+/* Capacitor 8 injects --safe-area-inset-* on Android. Keep env() as the
+   browser/PWA fallback. */
 :root {
-  --app-safe-top: env(safe-area-inset-top, 0px);
-  --app-safe-right: env(safe-area-inset-right, 0px);
-  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --app-safe-left: env(safe-area-inset-left, 0px);
+  --app-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --app-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --app-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --app-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
   --glass-fill: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(255, 255, 255, 0.74);
   --glass-shadow: 0 8px 28px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
